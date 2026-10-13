@@ -65,7 +65,6 @@ const toggles: Record<string, [keyof Settings, string, string][]> = {
   desktop: [
     ['associateLegacyScheme', '关联旧 LX 链接', '启用后由琛瑾音乐打开 LX 分享链接'],
     ['tray', '系统托盘', '从托盘快速控制播放'],
-    ['closeToTray', '关闭窗口时最小化', '音乐继续在后台播放'],
     ['preventSleep', '播放时防止休眠', '保持持续聆听'],
     ['searchHistory', '记录搜索历史', '保存最近搜索关键词'],
     ['hotSearch', '显示热门搜索', '从所选平台获取真实热搜'],
@@ -99,6 +98,7 @@ onMounted(async () => { if (bridge) await music.task(async () => info.value = aw
         <label class="setting-row"><span>文件名模板 <small>{name} 歌名 · {singer} 艺人</small></span><input :value="music.settings.downloadFileName" @change="value('downloadFileName', $event)" /></label>
       </template>
       <template v-else-if="group === 'desktop'">
+        <label class="setting-row"><span><strong>关闭主窗口时</strong><small>选择每次询问可恢复关闭确认；隐藏到托盘会继续播放。</small></span><select :value="music.settings.closeBehavior||'ask'" aria-label="关闭主窗口时" @change="value('closeBehavior',$event)"><option value="ask">每次询问</option><option value="tray">隐藏到托盘</option><option value="quit">退出程序</option></select></label>
         <label class="setting-row"><span>托盘图标主题</span><select :value="music.settings.trayTheme||'auto'" @change="value('trayTheme',$event)"><option value="auto">跟随系统</option><option value="brand">品牌彩色</option><option value="black">黑色</option><option value="white">白色</option></select></label>
         <label v-for="choice in [{key:'clearSearchInput',name:'离开搜索时清空输入'},{key:'clearSearchResults',name:'离开搜索时清空结果'}]" :key="choice.key" class="setting-row"><span>{{choice.name}}<small>打开搜索歌单详情时保留搜索状态</small></span><input type="checkbox" class="switch" :checked="!!music.settings[choice.key]" @change="music.updateSettings({[choice.key]:($event.target as HTMLInputElement).checked})"/></label>
         <label class="setting-row"><span>网络代理</span><input :value="music.settings.proxy" placeholder="http://127.0.0.1:7890" @change="value('proxy', $event)" /></label>

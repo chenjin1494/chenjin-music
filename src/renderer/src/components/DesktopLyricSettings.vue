@@ -3,6 +3,7 @@ import { useMusic, invoke, bridge } from '../store'
 
 const music = useMusic()
 const rules = [
+  {key:'desktopLyricNextLine',name:'下一句预览',detail:'横向且窗口高度足够时显示下一句歌词'},
   {key:'desktopLyricVisualization',name:'桌面歌词频谱',detail:'显示当前播放音频的真实频谱'},
   {key:'desktopLyricScreenLock',name:'限制在屏幕内',detail:'由桌面服务保持歌词窗口位于可见屏幕'},
   {key:'desktopLyricTopLoop',name:'持续保持置顶',detail:'定期恢复已启用的歌词置顶状态'},
@@ -18,6 +19,7 @@ function numeric(key: string, event: Event): void { void music.updateSettings({ 
 
 <template>
   <h3 class="desktop-settings-title">桌面歌词外观与行为</h3>
+  <div class="setting-row"><span>恢复歌词窗口 <small>找回移出屏幕或尺寸过小的歌词窗口</small></span><button :disabled="!bridge" @click="music.task(()=>invoke('desktop.resetPosition'))">重置歌词位置</button></div>
   <label class="setting-row"><span>独立字体 <small>留空跟随完整歌词字体</small></span><input :value="music.settings.desktopLyricFont || ''" placeholder="跟随歌词字体" @change="text('desktopLyricFont', $event)" /></label>
   <label class="setting-row"><span>独立字号</span><input type="number" min="12" max="96" :value="music.settings.desktopLyricFontSize || 32" @change="numeric('desktopLyricFontSize', $event)" /></label>
   <label class="setting-row"><span>排列方向</span><select :value="music.settings.desktopLyricDirection || 'horizontal'" @change="text('desktopLyricDirection', $event)"><option value="horizontal">横向</option><option value="vertical">纵向</option></select></label>

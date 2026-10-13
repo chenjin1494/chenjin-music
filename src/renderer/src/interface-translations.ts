@@ -2,6 +2,8 @@ import { registerTranslations } from './i18n'
 import './domain/lyric-editor-translations'
 import './domain/comment-translations'
 import './domain/appearance-translations'
+import './domain/close-translations'
+import './domain/desktop-translations'
 
 registerTranslations(Object.fromEntries(`
 更新说明|Update notes

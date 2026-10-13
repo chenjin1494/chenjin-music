@@ -89,11 +89,18 @@ export class DesktopService {
   if(settings.tray&&!this.tray){
    this.tray=new Tray(icons.music);this.tray.setToolTip('琛瑾音乐');this.tray.on('double-click',()=>{this.main()?.show();this.main()?.focus()})
   }else if(!settings.tray&&this.tray){this.tray.destroy();this.tray=undefined;this.trayTone=undefined}
-  this.tray?.setContextMenu(Menu.buildFromTemplate([{label:'显示琛瑾音乐',click:()=>{this.main()?.show();this.main()?.focus()}},{label:'播放 / 暂停',click:()=>this.command('toggle')},{label:'上一首',click:()=>this.command('prev')},{label:'下一首',click:()=>this.command('next')},{type:'separator'},{label:'桌面歌词',type:'checkbox',checked:!!settings.desktopLyric,click:()=>this.setLyric(!this.enabled)},{label:'退出',click:()=>this.command('quit')}]))
+  this.updateTrayMenu()
   this.updateTrayImage();this.updateStatusText()
   this.setLyric(settings.desktopLyric,false)
   if(this.lyric){this.place(this.desiredBounds());this.setLock(this.locked,false);this.setTop(this.onTop,false);this.lyric.setSkipTaskbar(!settings.desktopLyricTaskbar);this.lyric.setOpacity(Math.max(0,Math.min(1,finite(settings.desktopLyricOpacity,1))));this.lyric.setResizable(!this.locked);this.queueBoundsSave();this.sendStyle()}
   this.refreshVisibility();this.updateBlocker(settings)
+ }
+ private updateTrayMenu(){this.tray?.setContextMenu(Menu.buildFromTemplate([{label:'显示琛瑾音乐',click:()=>{this.main()?.show();this.main()?.focus()}},{label:'播放 / 暂停',click:()=>this.command('toggle')},{label:'上一首',click:()=>this.command('prev')},{label:'下一首',click:()=>this.command('next')},{type:'separator'},{label:'桌面歌词',type:'checkbox',checked:this.enabled,click:()=>this.setLyric(!this.enabled)},{label:this.locked?'解锁桌面歌词':'锁定桌面歌词',enabled:this.enabled,click:()=>this.setLock(!this.locked)},{label:'重置歌词位置',enabled:this.enabled,click:()=>this.resetPosition()},{label:'退出',click:()=>this.command('quit')}]))}
+ resetPosition(){
+  if(!this.settings)return false
+  const area=screen.getPrimaryDisplay().workArea,vertical=this.settings.desktopLyricDirection==='vertical'
+  const bounds=clampLyricBounds({x:vertical?area.x+area.width-200:area.x+(area.width-900)/2,y:vertical?area.y+(area.height-700)/2:area.y+area.height-200,width:vertical?180:900,height:vertical?700:180},this.areas())
+  this.save({desktopLyricX:bounds.x,desktopLyricY:bounds.y,desktopLyricWidth:bounds.width,desktopLyricHeight:bounds.height});this.place(bounds,true);this.sendStyle();return bounds
  }
  private sendStyle(){if(this.lyric&&!this.lyric.isDestroyed())this.lyric.webContents.send('desktop.preferences',structuredClone(this.settings))}
  registerHotkeys(settings=this.settings){
@@ -110,14 +117,14 @@ export class DesktopService {
   this.enabled=enabled;if(persist)this.save({desktopLyric:enabled})
   if(enabled&&(!this.lyric||this.lyric.isDestroyed())){
    const win=this.createLyric();this.lyric=win;win.setMinimumSize(38,38);win.setMaximizable(false);win.setFullScreenable(false);win.setHasShadow(false);this.place(this.settings?this.desiredBounds():win.getBounds());win.setAlwaysOnTop(this.onTop,'floating');win.setIgnoreMouseEvents(this.locked,{forward:true});win.setResizable(!this.locked)
-   win.on('move',()=>this.queueBoundsSave());win.on('resize',()=>this.queueBoundsSave());win.on('closed',()=>{if(this.lyric===win)this.lyric=undefined});win.webContents.on('did-finish-load',()=>{if(this.lyric===win){this.sendStyle();this.refreshVisibility()}})
+   win.on('move',()=>this.queueBoundsSave());win.on('resize',()=>this.queueBoundsSave());win.on('closed',()=>{if(this.lyric===win)this.lyric=undefined});win.webContents.on('did-finish-load',()=>{if(this.lyric===win){this.sendStyle();if(this.lastStatus)win.webContents.send('lyric.status',structuredClone(this.lastStatus));this.refreshVisibility()}})
   }
   if(enabled&&!this.timer){this.timer=setInterval(()=>this.refreshVisibility(),Math.max(50,this.options.pollMs??100));this.timer.unref()}
   if(!enabled&&this.timer){clearInterval(this.timer);this.timer=undefined}
-  this.refreshVisibility();return enabled
+  this.refreshVisibility();this.updateTrayMenu();return enabled
  }
- setLock(enabled:boolean,persist=true){this.locked=enabled;this.lyric?.setIgnoreMouseEvents(enabled,{forward:true});this.lyric?.setResizable(!enabled);if(persist)this.save({desktopLyricLock:enabled});this.refreshVisibility();return enabled}
- setTop(enabled:boolean,persist=true){this.onTop=enabled;this.lyric?.setAlwaysOnTop(enabled,'floating');if(persist)this.save({desktopLyricTop:enabled});return enabled}
+ setLock(enabled:boolean,persist=true){this.locked=enabled;this.lyric?.setIgnoreMouseEvents(enabled,{forward:true});this.lyric?.setResizable(!enabled);if(persist)this.save({desktopLyricLock:enabled});this.sendStyle();this.updateTrayMenu();this.refreshVisibility();return enabled}
+ setTop(enabled:boolean,persist=true){this.onTop=enabled;this.lyric?.setAlwaysOnTop(enabled,'floating');if(persist)this.save({desktopLyricTop:enabled});this.sendStyle();return enabled}
  private refreshVisibility(){
   if(!this.lyric||this.lyric.isDestroyed()||!this.settings)return
   if(this.enabled&&this.onTop&&this.settings.desktopLyricTopLoop===true)this.lyric.setAlwaysOnTop(true,'floating')

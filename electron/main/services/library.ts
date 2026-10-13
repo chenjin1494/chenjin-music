@@ -34,7 +34,11 @@ export function normalizeState(raw: any): LibraryState {
  return { ...base, version: 1, editedLyrics:raw.editedLyrics&&typeof raw.editedLyrics==='object'&&!Array.isArray(raw.editedLyrics)?structuredClone(raw.editedLyrics):{}, playlists, settings: normalizeSettings(raw.settings ?? raw.setting ?? {}), scripts: Array.isArray(raw.scripts) ? raw.scripts : [], downloads: Array.isArray(raw.downloads) ? raw.downloads : [], searchHistory: Array.isArray(raw.searchHistory) ? raw.searchHistory.filter((x: unknown) => typeof x === 'string').slice(0,100) : [], dislikes: Array.isArray(raw.dislikes) ? raw.dislikes.filter((x: unknown) => typeof x === 'string') : [], player: raw.player && Array.isArray(raw.player.queue) ? {queue: raw.player.queue.map(normalizeTrack), currentId: raw.player.currentId, progress: Math.max(0,Number(raw.player.progress)||0),...(Array.isArray(raw.player.priorityQueue)?{priorityQueue:raw.player.priorityQueue.map(normalizeTrack)}:{}),...(raw.player.priorityCurrent?{priorityCurrent:normalizeTrack(raw.player.priorityCurrent)}:{}),...(Number.isFinite(raw.player.resumeIndex)?{resumeIndex:raw.player.resumeIndex}:{})} : undefined }
 }
 export function normalizeSettings(patch: Partial<Settings>, current: Settings = defaultSettings): Settings {
- const result = { ...structuredClone(current), ...migrateLegacySettings(patch) }
+ const migrated=migrateLegacySettings(patch)
+  const result = { ...structuredClone(current), ...migrated }
+  if(!Object.prototype.hasOwnProperty.call(migrated,'closeBehavior')&&Object.prototype.hasOwnProperty.call(migrated,'closeToTray'))result.closeBehavior=migrated.closeToTray===true?'tray':'ask'
+  if(!['ask','tray','quit'].includes(String(result.closeBehavior)))result.closeBehavior='ask'
+  result.closeToTray=result.closeBehavior==='tray'
  const clamp = (n: unknown, min: number, max: number, fallback: number) => Number.isFinite(Number(n)) ? Math.min(max, Math.max(min, Number(n))) : fallback
  result.volume = clamp(result.volume, 0, 1, .75); result.playbackRate = clamp(result.playbackRate,.25,4,1)
  result.downloadConcurrency = Math.round(clamp(result.downloadConcurrency,1,10,3))

@@ -52,6 +52,8 @@ function embedMP3(file: string, text = main): void {
 }
 
 describe('real local audio lyric extraction', () => {
+  it.each(['utf16-le','utf16-be'])('decodes %s with and without BOM while retaining supplementary Chinese and emoji',encoding=>{const text='[00:00.10]中文歌词𠀀🎵\n[00:03.00]下一句';const bytes=iconv.encode(text,encoding);const bom=encoding==='utf16-le'?Buffer.from([255,254]):Buffer.from([254,255]);expect(lyricText(bytes)).toBe(text);expect(lyricText(Buffer.concat([bom,bytes]))).toBe(text)})
+  it('reads mixed Windows UTF-16 main and companion lyrics beside a real MP3',async()=>{const file=await fixture('mp3'),base=file.replace(/\.mp3$/,'');await writeFile(base+'.lrc',Buffer.concat([Buffer.from([255,254]),iconv.encode(main,'utf16-le')]));await writeFile(base+'.translation.lrc',Buffer.concat([Buffer.from([254,255]),iconv.encode(translated,'utf16-be')]));await writeFile(base+'.roman.lrc',iconv.encode(roman,'utf16-le'));await writeFile(base+'.lx.lrc',iconv.encode(word,'utf16-be'));expect(await readLocalLyrics(track(file))).toEqual({lyric:main,tlyric:translated,rlyric:roman,lxlyric:word})})
   it('decodes UTF-8 BOM and GB18030 Chinese without changing lyric text', () => {
     expect(lyricText(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(main)]))).toBe(main)
     const legacy = '[00:01.00]中文歌词与𠀀扩展汉字'

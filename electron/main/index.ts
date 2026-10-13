@@ -63,7 +63,7 @@ const mediaFiles=new Map<string,string>()
 const localFiles=new Set<string>()
 const importedTracks=new Map<string,Track>()
 const trustedWindows=new Set<number>()
-const methods=new Set(['library.load','app.flushReady','library.save','settings.update','files.import','audio.importImpulse','theme.importImage','playlists.create','playlists.rename','playlists.remove','playlists.add','playlists.removeTracks','playlists.reorder','playlists.sort','playlists.dedupe','playlists.transfer','playlists.order','playlists.refresh','discovery.tags','search.playlists','metadata.detail','discovery.album','discovery.singer','backup.import','backup.importLegacyDirectory','backup.export','backup.exportText','sources.importURL','sources.import','sources.activate','sources.remove','search','discovery.playlists','discovery.playlist','discovery.boards','discovery.board','lyrics','lyrics.save','comments','search.hot','search.suggest','playback.resolve','playback.alternatives','playback.status','playback.command','downloads.add','downloads.action','desktop.lyric','desktop.lock','desktop.top','app.info','app.openExternal','app.openPath','app.selectDirectory','update.check','update.download','update.cancel','update.install','sync.status','sync.auth','sync.mode','sync.device.remove','cache.clear','cache.stats'])
+const methods=new Set(['library.load','app.flushReady','library.save','settings.update','files.import','audio.importImpulse','theme.importImage','playlists.create','playlists.rename','playlists.remove','playlists.add','playlists.removeTracks','playlists.reorder','playlists.sort','playlists.dedupe','playlists.transfer','playlists.order','playlists.refresh','discovery.tags','search.playlists','metadata.detail','discovery.album','discovery.singer','backup.import','backup.importLegacyDirectory','backup.export','backup.exportText','sources.importURL','sources.import','sources.activate','sources.remove','search','discovery.playlists','discovery.playlist','discovery.boards','discovery.board','lyrics','lyrics.save','comments','search.hot','search.suggest','playback.resolve','playback.alternatives','playback.status','playback.snapshot','playback.command','downloads.add','downloads.action','desktop.lyric','desktop.showMain','desktop.resetPosition','desktop.lock','desktop.top','app.info','app.openExternal','app.openPath','app.selectDirectory','update.check','update.download','update.cancel','update.install','sync.status','sync.auth','sync.mode','sync.device.remove','cache.clear','cache.stats'])
 const emit=(event:string,data:unknown)=>{for(const win of BrowserWindow.getAllWindows()){if(trustedWindows.has(win.webContents.id)&&!win.isDestroyed())win.webContents.send(event,data)}}
 const command=(command:string,value?:unknown)=>{
  if(command==='windowMinimize'){mainWindow?.minimize();return}
@@ -102,7 +102,30 @@ function createWindow(lyric=false) {
  secureWindow(win);loadRenderer(win,lyric)
  if(!lyric)win.webContents.once('did-finish-load',()=>{const links=pendingDeepLinks;pendingDeepLinks=[];for(const link of links)handleDeepLink(link)})
  win.once('ready-to-show',()=>{if(lyric)win.showInactive();else {if(!startup.hidden)win.show();if(library.get().settings.startInFullscreen)win.setFullScreen(true);desktop?.status(status,library.get().settings)}win.webContents.send('lyric.status',status)})
- if(!lyric){let closing=false;win.on('close',event=>{if(quitting)return;event.preventDefault();if(library.get().settings.closeToTray&&library.get().settings.tray){win.hide();return}if(closing)return;closing=true;if(process.platform==='darwin')void flushRenderer().finally(()=>win.destroy());else app.quit()});win.on('closed',()=>{mainWindow=undefined})}
+ if(!lyric){let closing=false;win.on('close',event=>{
+   if(quitting)return
+   event.preventDefault();if(closing)return;closing=true
+   void (async()=>{
+    const settings=library.get().settings
+    let behavior=settings.closeBehavior||'ask',remember=false
+    if(behavior==='ask'){
+     const language=settings.language,text=language==='en-US'?{title:'Close main window',message:'Keep music playing in the background or exit?',detail:'Hide to tray keeps playback running. Exit stops playback and closes the application.',buttons:['Hide to tray','Exit','Cancel'],checkbox:'Do not ask again',error:'Unable to close the window'}:language==='zh-TW'?{title:'關閉主視窗',message:'隱藏到系統匣，還是退出程式？',detail:'隱藏到系統匣會繼續播放；退出程式會停止播放並關閉應用程式。',buttons:['隱藏到系統匣','退出程式','取消'],checkbox:'下次不再詢問',error:'無法關閉視窗'}:{title:'关闭主窗口',message:'隐藏到托盘，还是退出程序？',detail:'隐藏到托盘会继续播放；退出程序会停止播放并关闭应用。',buttons:['隐藏到托盘','退出程序','取消'],checkbox:'下次不再询问',error:'无法关闭窗口'}
+     const choice=await dialog.showMessageBox(win,{type:'question',title:text.title,message:text.message,detail:text.detail,buttons:text.buttons,defaultId:0,cancelId:2,noLink:true,checkboxLabel:text.checkbox,checkboxChecked:false})
+     if(quitting||win.isDestroyed()||choice.response===2||![0,1].includes(choice.response))return
+     behavior=choice.response===0?'tray':'quit';remember=choice.checkboxChecked
+    }
+    if(quitting||win.isDestroyed())return
+    // Flush the renderer before storing a choice: a stale library.save must not overwrite it.
+    await flushRenderer();if(quitting||win.isDestroyed())return
+    const patch:Partial<Settings>={}
+    if(remember)patch.closeBehavior=behavior as 'tray'|'quit'
+    if(behavior==='tray')patch.tray=true
+    if(Object.keys(patch).length)await updateSettings(patch)
+    if(quitting||win.isDestroyed())return
+    if(behavior==='tray'){win.hide();return}
+    quitting=true;app.quit()
+   })().catch(error=>{if(!quitting&&!win.isDestroyed()){win.show();win.focus();emit('app.error',{message:`关闭窗口失败：${error}`})}}).finally(()=>{closing=false})
+  });win.on('closed',()=>{mainWindow=undefined})}
  return win
 }
 function assertSender(event:Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) {
@@ -257,12 +280,12 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
     const track=normalizeTrack(params.track??params)
     if(params.resetEdited){await editedLyrics.remove(track);await library.mutate(state=>{if(state.editedLyrics)delete state.editedLyrics[track.id]})}
     else {const edited=library.get().editedLyrics?.[track.id]??await editedLyrics.get(track);if(edited)return edited}
-    if(!params.refresh){const saved=await lyricCache.get(track);if(saved)return saved}
     if(track.source==='local'){
      const filename=track.meta.filePath;const state=library.get();const authorized=!!filename&&(localFiles.has(filename)||state.playlists.some(list=>list.tracks.some(item=>item.source==='local'&&item.meta.filePath===filename))||state.player?.queue.some(item=>item.source==='local'&&item.meta.filePath===filename))
      if(!authorized)throw new Error('请先导入授权本地歌曲')
      const local=await readLocalLyrics(track);if(local){await lyricCache.set(track,local);return local}
     }
+    if(!params.refresh){const saved=await lyricCache.get(track);if(saved)return saved}
     let result={lyric:''};let failure:unknown;try{result=await providers.getLyrics(track);if(result.lyric){await lyricCache.set(track,result);return result}}catch(error){failure=error}
     const script=library.get().scripts.find(x=>x.enabled);if(script?.sources?.[track.source]?.actions.includes('lyric')){const lyrics=await runtime.lyrics(track);await lyricCache.set(track,lyrics);return lyrics}
     if(track.source==='local'){
@@ -277,11 +300,14 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
   case 'playback.alternatives':{const track=normalizeTrack(params.track);const results=await providers.search('all',`${track.name} ${track.singer}`,1,10);return rankAlternativeTracks(track,results.list)}
    case 'playback.resolve':{const q=quality(params.quality??library.get().settings.quality);return resolveTrack(params.track,q)}
   case 'playback.status':{if(senderId!==mainWindow?.webContents.id)throw new Error('播放状态只能由主窗口提供');const raw=params.status&&typeof params.status==='object'?params.status:params;const next={...status};if(Array.isArray(raw.spectrum)&&raw.spectrum.length===16&&raw.spectrum.every((value:unknown)=>typeof value==='number'&&Number.isFinite(value)))next.spectrum=raw.spectrum.map((value:number)=>Math.max(0,Math.min(1,value)));else delete next.spectrum;for(const key of Object.keys(initialPlayerStatus) as (keyof PlayerStatus)[]){if(typeof raw[key]===typeof initialPlayerStatus[key])(next as any)[key]=raw[key]}if(!['playing','paused','stoped','loading','error'].includes(next.status))throw new Error('播放状态无效');status=next;if(Date.now()-lastProgressSave>5000){lastProgressSave=Date.now();savePlaybackProgress()}api.publish(status);desktop.status(status,library.get().settings);emit('player.status',status);emit('lyric.status',status);return true}
-  case 'playback.command':{if(!['toggle','play','pause','stop','next','prev','previous','seek','volume','mute','collect','rate','mode'].includes(params.action))throw new Error('播放控制命令无效');mainWindow?.webContents.send('player.command',{action:params.action,value:params.value});return true}
+  case 'playback.snapshot':return structuredClone(status)
+   case 'playback.command':{if(!['toggle','play','pause','stop','next','prev','previous','seek','volume','mute','collect','rate','mode'].includes(params.action))throw new Error('播放控制命令无效');mainWindow?.webContents.send('player.command',{action:params.action,value:params.value});return true}
   case 'downloads.add':if(!Array.isArray(params.tracks))throw new Error('请提供下载歌曲列表');return downloads.add(params.tracks,quality(params.quality??library.get().settings.quality),typeof params.playlistName==='string'?params.playlistName:params.playlistId?library.get().playlists.find(list=>list.id===params.playlistId)?.name:undefined)
   case 'downloads.action':return downloads.action(params.id,params.action)
   case 'desktop.lyric':await updateSettings({desktopLyric:!!params.enabled});return !!params.enabled
-  case 'desktop.lock':return desktop.setLock(!!params.enabled)
+  case 'desktop.showMain':if(mainWindow){if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus()}return true
+   case 'desktop.resetPosition':return desktop.resetPosition()
+   case 'desktop.lock':return desktop.setLock(!!params.enabled)
   case 'desktop.top':return desktop.setTop(!!params.enabled)
   case 'app.selectDirectory':{const selected=await dialog.showOpenDialog(mainWindow!,{properties:['openDirectory','createDirectory']});return selected.canceled?null:selected.filePaths[0]}
    case 'app.info':return {name:app.getName(),version:app.getVersion(),platform:process.platform,userData:app.getPath('userData'),storage:'sqlite-worker',openAPI:{enabled:library.get().settings.openAPI,port:library.get().settings.openAPIPort}}
