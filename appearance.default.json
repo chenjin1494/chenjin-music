@@ -1,0 +1,11 @@
+{
+  "format": "chenjin-appearance",
+  "version": 1,
+  "name": "默认外观",
+  "global": {
+    "radius": 14,
+    "gap": 12,
+    "shadow": "soft"
+  },
+  "components": {}
+}

@@ -1,0 +1,123 @@
+name: Build desktop app
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Build target
+        required: true
+        default: windows
+        type: choice
+        options:
+          - windows
+          - linux
+          - macos
+          - all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Select platforms
+        id: matrix
+        env:
+          TARGET: ${{ inputs.platform }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          targets = [
+              {"platform": "windows", "os": "windows-latest", "builder": "--win --x64"},
+              {"platform": "linux", "os": "ubuntu-22.04", "builder": "--linux --x64"},
+              {"platform": "macos", "os": "macos-14", "builder": "--mac --x64"},
+          ]
+          selected = [item for item in targets if os.environ["TARGET"] in ("all", item["platform"])]
+          if not selected:
+              raise SystemExit("Unknown build target")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": selected}) + "\n")
+          PY
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies from lockfile
+        run: pnpm install --frozen-lockfile
+      - name: Install browser for interface tests
+        if: matrix.platform != 'linux'
+        run: pnpm exec playwright install chromium
+      - name: Install Linux build and browser dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y fakeroot libarchive-tools fonts-noto-cjk
+          pnpm exec playwright install --with-deps chromium
+      - name: Test
+        run: pnpm test
+      - name: Build production application
+        run: pnpm run build
+      - name: Package application
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm exec electron-builder ${{ matrix.builder }} --publish never
+      - name: Generate checksums for distributable files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib
+          root = pathlib.Path("release")
+          files = sorted(file for file in root.iterdir() if file.is_file() and file.suffix.lower() in {".exe", ".appimage", ".deb", ".dmg"})
+          if not files:
+              raise SystemExit("No distributable files generated")
+          sums = []
+          for file in files:
+              digest = hashlib.sha256()
+              with file.open("rb") as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b""):
+                      digest.update(block)
+              sums.append(f"{digest.hexdigest()}  {file.name}")
+          (root / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8")
+          PY
+      - name: Upload downloadable application packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: chenjin-music-${{ matrix.platform }}-x64-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/SHA256SUMS.txt

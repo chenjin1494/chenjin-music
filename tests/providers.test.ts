@@ -1,0 +1,22 @@
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('electron',()=>({net:{fetch:vi.fn()},session:{defaultSession:{setProxy:vi.fn(async()=>{}),closeAllConnections:vi.fn(async()=>{})}}}))
+import { clearProviderCache, contentLeaves, extractEmbeddedSongs, imageURL, normalizePlatformTrack, playlistInfo, search, searchPlaylists } from '../electron/main/services/providers'
+import { configureProxy, decodeText, parseJSONResponse, fetchText } from '../electron/main/services/network'
+import { net,session } from 'electron'
+const mock=vi.mocked(net.fetch)
+describe('provider protocol normalization',()=>{
+ it('保留空children叶节点并递归页面contents',()=>{expect(contentLeaves({child:[{sourceid:'16',child:[]}]},r=>r.sourceid).map(r=>r.sourceid)).toEqual(['16']);expect(contentLeaves({contents:[{contents:[{rankId:'1',rankName:'榜单'}]}]},r=>r.rankId)).toHaveLength(1)})
+ it('仅解析嵌入JSON，不执行页面代码或截断字符串',()=>{expect(extractEmbeddedSongs('<script>var data=[{"name":"x ]; y","items":[1,2]}];throw new Error();</script>')[0].name).toBe('x ]; y');expect(()=>extractEmbeddedSongs('var data=[{name:evil()}];')).toThrow('格式已变化')})
+ it('统一图片路径但拒绝脚本地址',()=>{expect(imageURL('/data/cover.jpg','https://d.musicapp.migu.cn')).toBe('https://d.musicapp.migu.cn/data/cover.jpg');expect(imageURL('http://imge.kugou.com/{size}/cover.jpg')).toBe('https://imgessl.kugou.com/400/cover.jpg');expect(imageURL('javascript:alert(1)')).toBeNull()})
+ it('酷狗毫秒时长、质量hash和歌手id转为共享数据',()=>{const t=normalizePlatformTrack('kg',{hash:'abc',audio_id:1,audio_name:'歌曲',timelength:269000,authors:[{author_id:2,author_name:'歌手'}],filesize_128:100,hash_128:'abc',filesize_flac:200,hash_flac:'flac-hash',album_sizable_cover:'https://imgessl.kugou.com/{size}/pic.jpg'});expect(t.interval).toBe('04:29');expect(t.singer).toBe('歌手');expect(t.meta.qualitys?.find(x=>x.type==='flac')?.hash).toBe('flac-hash');expect(t.meta.singerIds).toEqual(['2']);expect(t.meta.picUrl).toContain('/400/')})
+ it('咪咕保留copyrightId与songId区分、相对图片和双歌词链接',()=>{const t=normalizePlatformTrack('mg',{songData:JSON.stringify({copyrightId:'cp',songId:'song',songName:'名称',singers:[{id:3,name:'歌手'}],img1:'/data/a.jpg',mrcUrl:'https://d.musicapp.migu.cn/mrc'})});expect(t.meta.songId).toBe('cp');expect(t.meta.id).toBe('song');expect(t.meta.picUrl).toBe('https://d.musicapp.migu.cn/data/a.jpg');expect(t.meta.mrcUrl).toContain('/mrc')})
+ it('QQ页面歌单creator对象和咪咕resId字段正确解析',()=>{expect(playlistInfo('tx',{dissid:'123',dissname:'歌单',creator:{name:'作者'},imgurl:'https://example.com/a'}).author).toBe('作者');expect(playlistInfo('mg',{resId:'12',resType:'2021',txt:'歌单',imgItem:{img:'/data/x'}}).id).toBe('12')})
+})
+describe('network bounds and errors',()=>{
+ it('支持JSONP与BOM而拒绝JavaScript对象执行',()=>{expect(parseJSONResponse('\uFEFF callback({"ok":true});')).toEqual({ok:true});expect(parseJSONResponse("{'NAME':'测试','items':[]}")).toEqual({NAME:'测试',items:[]});expect(()=>parseJSONResponse('(()=>process.exit())()')).toThrow('无法识别')})
+ it('解码高亮、数字实体并保留无效Unicode',()=>{expect(decodeText('<em>晴天</em>&amp;&#x1F3B5;&#1114112;')).toBe('晴天&🎵&#1114112;')})
+ it('代理写入defaultSession并关闭旧连接',async()=>{await configureProxy('socks5://localhost:1080');expect(session.defaultSession.setProxy).toHaveBeenCalledWith(expect.objectContaining({mode:'fixed_servers',proxyRules:'socks5://localhost:1080'}));expect(session.defaultSession.closeAllConnections).toHaveBeenCalled();expect(()=>configureProxy('http://user:password@localhost')).toThrow('认证');expect(()=>configureProxy('file:///tmp')).toThrow('仅支持')})
+ it('限制响应体并传递已取消signal',async()=>{mock.mockResolvedValueOnce(new Response('large body'));await expect(fetchText('https://example.com',{},3)).rejects.toThrow('大小限制');const controller=new AbortController();controller.abort();mock.mockImplementationOnce(async(_url,init)=>{expect(init?.signal?.aborted).toBe(true);throw new Error('aborted')});await expect(fetchText('https://example.com',{signal:controller.signal})).rejects.toThrow('已取消')})
+ it('搜索不展开酷狗Grp造成分页重复',async()=>{mock.mockResolvedValueOnce(new Response(JSON.stringify({error_code:0,data:{total:2,lists:[{Audioid:1,FileName:'歌手 - 一',FileHash:'a',Grp:[{Audioid:2,FileName:'歌手 - 二'}]}]}})));const result=await search('kg','测试',1,5);expect(result.list).toHaveLength(1)})
+ it('聚合所有源失败时拒绝且不伪造结果',async()=>{clearProviderCache();mock.mockImplementation(async()=>{throw new Error('offline')});await expect(search('all','测试',1,5)).rejects.toThrow('所有平台');await expect(searchPlaylists('all','测试',1,5)).rejects.toThrow('所有平台')})
+})

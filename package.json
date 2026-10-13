@@ -1,0 +1,113 @@
+{
+  "name": "chenjin-music",
+  "version": "0.3.0",
+  "description": "琛瑾音乐 — 为每一次聆听而设计",
+  "homepage": "https://github.com/chenjin1494/chenjin-music",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/chenjin1494/chenjin-music.git"
+  },
+  "desktopName": "chenjin-music.desktop",
+  "main": "out/main/index.js",
+  "author": "琛瑾音乐",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "vue-tsc --noEmit && electron-vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "pack:win": "npm run build && electron-builder --win --x64",
+    "pack:linux": "npm run build && electron-builder --linux",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.7.0",
+    "lucide-vue-next": "^0.468.0",
+    "music-metadata": "^11.0.0",
+    "node-id3": "^0.2.9",
+    "opencc-js": "^1.4.2",
+    "pinia": "^3.0.0",
+    "proxy-agent": "^8.0.2",
+    "sql.js": "^1.14.2",
+    "vue": "^3.5.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.0.0",
+    "@types/sql.js": "^1.4.11",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-vue": "^5.2.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.0",
+    "vue-tsc": "^2.2.0"
+  },
+  "build": {
+    "appId": "com.chenjin.music",
+    "productName": "琛瑾音乐",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "docs/**/*.md",
+      "appearance*.json",
+      "package.json"
+    ],
+    "protocols": [
+      {
+        "name": "琛瑾音乐",
+        "schemes": [
+          "chenjinmusic"
+        ]
+      }
+    ],
+    "icon": "resources/chenjin.png",
+    "win": {
+      "icon": "resources/chenjin.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "Chenjin-Music-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Chenjin-Music-${version}-${arch}-Portable.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Chenjin-Music-${version}-${arch}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "琛瑾音乐"
+    },
+    "linux": {
+      "maintainer": "琛瑾音乐",
+      "syncDesktopName": true,
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo"
+    },
+    "deb": {
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "fonts-noto-cjk"]
+    },
+    "mac": {
+      "icon": "resources/chenjin.icns",
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.music"
+    }
+  }
+}

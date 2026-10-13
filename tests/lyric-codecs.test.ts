@@ -1,0 +1,15 @@
+import { describe,it,expect } from 'vitest'
+import { deflateSync } from 'node:zlib'
+import { decodeKrc,decodeKuwo,decodeMrc,decodeQrc,parseAbsoluteWordLyrics } from '../electron/main/services/lyric-codecs'
+import { parseTimedLyrics } from '../src/renderer/src/domain/lyrics'
+const krc=(text:string)=>{const key=[64,71,97,119,94,50,116,71,81,54,49,45,206,210,110,105];return Buffer.concat([Buffer.from('krc1'),deflateSync(text).map((b,i)=>b^key[i%16])])}
+const kuwo=(text:string)=>{const key=Buffer.from('yeelion'),data=Buffer.from(text).map((b,i)=>b^key[i%key.length]);return Buffer.concat([Buffer.from('tp=content\r\n\r\n'),deflateSync(Buffer.from(data).toString('base64'))])}
+describe('independent lyric wire codecs',()=>{
+ it('KRC preserves relative word timing and aligned translation/roman arrays',()=>{const language=Buffer.from(JSON.stringify({content:[{type:1,lyricContent:[['翻译']]},{type:0,lyricContent:[['ro','ma']]}]})).toString('base64');const result=decodeKrc(krc(`[language:${language}]\n[1200,1000]<0,300,0>你<400,600,0>好`));expect(result.lyric).toBe('[00:01.200]你好');expect(result.tlyric).toBe('[00:01.200]翻译');expect(result.rlyric).toBe('[00:01.200]roma');expect(parseTimedLyrics(result.lxlyric)[0].words?.[1]).toEqual({time:1.6,duration:.6,text:'好'})})
+ it('rejects missing KRC magic and excessive decompression',()=>{expect(()=>decodeKrc(Buffer.from('invalid'))).toThrow('文件头');expect(()=>decodeKrc(krc('x'.repeat(4*1024*1024+1)))).toThrow()})
+ it('converts QRC/MRC absolute word clocks without treating relative offset as absolute',()=>{const result=parseAbsoluteWordLyrics('<LyricInfo LyricContent="[5000,1000]你(5000,400)好(5400,600)" />');expect(result.lyric).toBe('[00:05.000]你好');expect(parseTimedLyrics(result.lxlyric)[0].words?.[1].time).toBe(5.4)})
+ it('decodes Kuwo XOR+zlib payload and octal-derived word timing',()=>{const result=decodeKuwo(kuwo('[kuwo:13]\n[00:05.000]<400,-400>你<1400,-600>好'));expect(result.lyric).toBe('[00:05.000]你好');expect(parseTimedLyrics(result.lxlyric)[0].words).toEqual([{time:5,duration:.4,text:'你'},{time:5.4,duration:1,text:'好'}])})
+ it('decrypts a captured QRC XML header with protocol-specific bit layout',()=>{const hex='E5D94A70C91F702238E3DD4AEC7EC2A6247F320388EA1F8FE34EFF03FEE92F3162F7FB86BE0BF323723C21013978A28263DC776F81A790E81444AFC154EAF7FF67A6A9F1BFD9C3E639F56DB7A3B34D94CBCA987D54B652B348AE080774EA7AD8DE88F15E4E1670CFC8D8EDCE993A5FC80F09BC43C220BEB94590CB0F2E206B03';expect(decodeQrc(hex)).toBe('<?xml version="1.0" encoding=')})
+ it('aligns Kuwo preceding translation to the previous original clock',()=>{const result=decodeKuwo(kuwo('[kuwo:13]\n[00:05.000]<400,-400>你<1400,-600>好\n[00:07.000]<0,0>Hello\n[00:07.000]<400,-400>再见'));expect(result.lyric.split('\n')).toHaveLength(2);expect(result.tlyric).toBe('[00:05.000]Hello')})
+ it('retains plain MRC fallback and rejects malformed ciphertext',()=>{expect(decodeMrc('[00:01.00]行歌词').lyric).toContain('行歌词');expect(()=>decodeMrc('a'.repeat(33))).toThrow('长度');expect(()=>decodeQrc('abc')).toThrow('长度');expect(()=>decodeKuwo(Buffer.from('plain html'))).toThrow('格式')})
+})
