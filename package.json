@@ -1,6 +1,6 @@
 {
   "name": "chenjin-music",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "琛瑾音乐 — 为每一次聆听而设计",
   "homepage": "https://github.com/chenjin1494/chenjin-music",
   "repository": {
@@ -22,6 +22,7 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "@material/material-color-utilities": "0.3.0",
     "iconv-lite": "^0.7.0",
     "lucide-vue-next": "^0.468.0",
     "music-metadata": "^11.0.0",
@@ -100,7 +101,18 @@
       "category": "AudioVideo"
     },
     "deb": {
-      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "fonts-noto-cjk"]
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "fonts-noto-cjk"
+      ]
     },
     "mac": {
       "icon": "resources/chenjin.icns",

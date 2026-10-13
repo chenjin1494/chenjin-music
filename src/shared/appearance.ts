@@ -57,7 +57,7 @@ export function appearancePropertyBounds(id: AppearanceComponentId | 'global', k
   const info = APPEARANCE_PROPERTIES[key]
   return { min: bounds?.[0] ?? info.min, max: bounds?.[1] ?? info.max }
 }
-export const DEFAULT_APPEARANCE: AppearanceConfig = { format: 'chenjin-appearance', version: 1, name: '默认外观', global: { radius: 14, gap: 12, shadow: 'soft' }, components: {} }
+export const DEFAULT_APPEARANCE: AppearanceConfig = { format: 'chenjin-appearance', version: 1, name: '默认外观', global: { gap: 12 }, components: {} }
 const preset = (name: string, global: AppearanceStyle, components: AppearanceConfig['components'] = {}): AppearanceConfig => ({ format: 'chenjin-appearance', version: 1, name, global: { ...DEFAULT_APPEARANCE.global, ...global }, components })
 export const APPEARANCE_PRESETS: Array<{ id: string; label: string; config: AppearanceConfig }> = [
   { id: 'midnight', label: '午夜紫', config: preset('午夜紫', { background: '#151321', color: '#f1eefc', mutedColor: '#aaa2bf', accentColor: '#b69aff', borderColor: '#332c47', hoverBackground: '#272039', activeBackground: '#382950', radius: 18, shadow: 'elevated' }, { sidebar: { background: '#1b172a' }, player: { background: '#211b32' }, hero: { background: '#302344', headingSize: 32 } }) },
@@ -128,7 +128,11 @@ export function parseAppearance(input: unknown): AppearanceConfig {
   return { format: 'chenjin-appearance', version: 1, name: source.name.trim(), global: style(source.global), components }
 }
 export function normalizeAppearance(input: unknown): AppearanceConfig {
-  try { return parseAppearance(input) } catch { return parseAppearance(DEFAULT_APPEARANCE) }
+  try {
+    const config=parseAppearance(input),global=config.global
+    if(config.name==='默认外观'&&Object.keys(config.components).length===0&&Object.keys(global).length===3&&global.radius===14&&global.gap===12&&global.shadow==='soft')return parseAppearance(DEFAULT_APPEARANCE)
+    return config
+  } catch { return parseAppearance(DEFAULT_APPEARANCE) }
 }
 const SHADOWS = { none: 'none', soft: '0 4px 18px rgba(0, 0, 0, 0.08)', elevated: '0 12px 36px rgba(0, 0, 0, 0.18)' }
 const kebab = (value: string) => value.replace(/[A-Z]/g, char => `-${char.toLowerCase()}`)

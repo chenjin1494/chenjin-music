@@ -5,10 +5,17 @@ import type { AppearanceStyle } from '../src/shared/appearance'
 const config = (global: unknown = {}, components: unknown = {}) => ({ ...DEFAULT_APPEARANCE, global, components })
 
 describe('appearance configuration', () => {
+  it('migrates only the exact legacy default to native Material shapes',()=>{
+    const old=config({radius:14,gap:12,shadow:'soft'})
+    expect(normalizeAppearance(old)).toEqual(DEFAULT_APPEARANCE)
+    expect(normalizeAppearance({...old,name:'我的外观'}).global.radius).toBe(14)
+    expect(normalizeAppearance({...old,components:{sidebar:{radius:14}}}).global.radius).toBe(14)
+    expect(normalizeAppearance(config({radius:15,gap:12,shadow:'soft'})).global.radius).toBe(15)
+  })
   it('matches the default JSON and keeps base theme colors inherited', () => {
     const file = JSON.parse(readFileSync(new URL('../appearance.default.json', import.meta.url), 'utf8'))
     expect(parseAppearance(file)).toEqual(DEFAULT_APPEARANCE)
-    expect(DEFAULT_APPEARANCE.global).toEqual({ radius: 14, gap: 12, shadow: 'soft' })
+    expect(DEFAULT_APPEARANCE.global).toEqual({ gap: 12 })
     expect(DEFAULT_APPEARANCE.components).toEqual({})
     expect(appearanceVariables(DEFAULT_APPEARANCE)).not.toHaveProperty('--cj-global-background')
   })
@@ -92,7 +99,7 @@ describe('appearance configuration', () => {
     for (const { config: preset } of APPEARANCE_PRESETS) expect(parseAppearance(JSON.stringify(preset))).toEqual(preset)
     const parsed = parseAppearance(DEFAULT_APPEARANCE)
     parsed.global.radius = 2
-    expect(DEFAULT_APPEARANCE.global.radius).toBe(14)
+    expect(DEFAULT_APPEARANCE.global.radius).toBeUndefined()
   })
   it.each(['#abc', '#abcd', '#ABCDEF', '#abcdef80', 'rgb(0, 128, 255)', 'rgba(255, 0, 2, .5)', 'rgba(1, 2, 3, 1)', 'transparent', 'currentColor', 'var(--cj-accent-color)'])('accepts safe color %s', color => {
     expect(parseAppearance(config({ background: color })).global.background).toBe(color)
@@ -133,7 +140,7 @@ describe('appearance configuration', () => {
     for (const value of [undefined, null, [], '{bad', config({ color: 'url(x)' })]) expect(normalizeAppearance(value)).toEqual(DEFAULT_APPEARANCE)
     const first = normalizeAppearance(null)
     first.global.radius = 0
-    expect(normalizeAppearance(null).global.radius).toBe(14)
+    expect(normalizeAppearance(null).global.radius).toBeUndefined()
     expect(normalizeAppearance(JSON.stringify(APPEARANCE_PRESETS[0].config))).toEqual(APPEARANCE_PRESETS[0].config)
   })
   it('emits kebab-case names and safe values with property-specific units', () => {
