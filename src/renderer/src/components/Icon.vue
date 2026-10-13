@@ -8,7 +8,7 @@ import {
   Minus, Monitor, Moon, MoreHorizontal, Music2, Mic2, Palette, PanelTop, Pause,
   Pencil, Pin, Play, Plus, Radio, RefreshCw, Repeat, Repeat1, Search,
   Settings2, ShieldCheck, Shuffle, SkipBack, SkipForward, Sparkles, Square,
-  Sun, Trash2, Unlock, Upload, Volume2, VolumeX, X, GripVertical,
+  Sun, Trash2, Unlock, Upload, Volume2, VolumeX, X, GripVertical, GripHorizontal,
 } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 })
@@ -20,7 +20,7 @@ const icons: Record<string, Component> = {
   Minus, Monitor, Moon, MoreHorizontal, Music2, Mic2, Palette, PanelTop, Pause,
   Pencil, Pin, Play, Plus, Radio, RefreshCw, Repeat, Repeat1, Search,
   Settings2, ShieldCheck, Shuffle, SkipBack, SkipForward, Sparkles, Square,
-  Sun, Trash2, Unlock, Upload, Volume2, VolumeX, X, GripVertical,
+  Sun, Trash2, Unlock, Upload, Volume2, VolumeX, X, GripVertical, GripHorizontal,
 }
 const icon = computed(() => icons[props.name] || Music2)
 </script>

@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import iconv from 'iconv-lite'
-import { parseFile } from 'music-metadata'
 import { decodeKrc } from './lyric-codecs'
 import type { Lyrics,Track } from '../../../src/shared/types'
 export function lyricText(bytes:Buffer):string{
@@ -23,7 +22,7 @@ export async function readLocalLyrics(track:Track):Promise<Lyrics|null>{
  const result:Lyrics={lyric:sidecar||'',tlyric:await read('.translation.lrc'),rlyric:await read('.roman.lrc'),lxlyric:await read('.lx.lrc')}
  if(!result.lxlyric)try{const bytes=await readFile(base+'.krc');if(bytes.length>2_000_000)throw new Error('KRC歌词文件过大');const krc=decodeKrc(bytes);result.lyric=result.lyric||krc.lyric;result.lxlyric=krc.lxlyric;result.tlyric=result.tlyric||krc.tlyric;result.rlyric=result.rlyric||krc.rlyric}catch{}
  if(!result.lyric&&!result.lxlyric)try{
-  const meta=await parseFile(track.meta.filePath,{skipCovers:true});const embedded=meta.common.lyrics?.[0]
+  const {parseFile}=await import('music-metadata');const meta=await parseFile(track.meta.filePath,{skipCovers:true});const embedded=meta.common.lyrics?.[0]
   if(embedded?.syncText?.some(item=>item.timestamp!=null))result.lyric=embedded.syncText.map(item=>stamp(item.timestamp||0)+item.text).join('\n')
   else result.lyric=embedded?.text||embedded?.syncText?.map(item=>item.text).join('\n')||''
  }catch{}

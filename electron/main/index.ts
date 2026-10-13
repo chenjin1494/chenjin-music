@@ -4,7 +4,6 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
 import { Readable } from 'node:stream'
-import { parseFile } from 'music-metadata'
 import type { LibraryState, PlayerStatus, Quality, Settings, SourceId, Track } from '../../src/shared/types'
 import { formatTime } from '../../src/shared/defaults'
 import { readLocalLyrics } from './services/local-lyrics'
@@ -41,6 +40,13 @@ if(storageDirectory){mkdirSync(storageDirectory,{recursive:true});app.setPath('u
 protocol.registerSchemesAsPrivileged([{scheme:'chenjin-media',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}])
 let mainWindow: BrowserWindow | undefined
 let quitting=false
+// Core readiness never depends on a renderer event: SQLite and main-window loading overlap.
+let startupReady:Promise<void>|undefined
+let startupServicesReady:Promise<void>|undefined
+let coreReady=false
+let showRequested=false
+let rendererStatusReceived=false
+let startupArgsTimer:ReturnType<typeof setTimeout>|undefined
 let library: LibraryStore
 let runtime: SourceRuntime
 let downloads: DownloadManager
@@ -57,7 +63,7 @@ async function flushRenderer(){
  const win=mainWindow;if(!win||win.isDestroyed())return
  await new Promise<void>(resolve=>{const token=randomUUID(),timer=setTimeout(()=>{if(pendingFlush?.token===token)pendingFlush=undefined;resolve()},3000);pendingFlush={token,windowId:win.webContents.id,resolve:()=>{clearTimeout(timer);pendingFlush=undefined;resolve()}};win.webContents.send('app.flush',{token})})
 }
-const savePlaybackProgress=()=>{if(!library)return;const state=library.get();if(state.player&&state.settings.savePlayTime){void library.mutate(s=>{if(s.player)s.player.progress=Math.max(0,status.progress)}).catch(error=>emit('app.error',{message:`播放进度保存失败：${error}`}))}}
+const savePlaybackProgress=()=>{if(!library||!rendererStatusReceived)return;const state=library.get();if(state.player&&state.settings.savePlayTime){void library.mutate(s=>{if(s.player)s.player.progress=Math.max(0,status.progress)}).catch(error=>emit('app.error',{message:`播放进度保存失败：${error}`}))}}
 const cache=new MemoryCache()
 const mediaFiles=new Map<string,string>()
 const localFiles=new Set<string>()
@@ -99,19 +105,30 @@ function loadRenderer(win:BrowserWindow,lyric=false) {
 }
 function createWindow(lyric=false) {
  const win=new BrowserWindow({width:lyric?900:1360,height:lyric?160:880,minWidth:lyric?400:960,minHeight:lyric?90:640,show:false,frame:false,transparent:lyric,backgroundColor:lyric?'#00000000':'#111118',resizable:true,skipTaskbar:lyric,alwaysOnTop:lyric,title:'琛瑾音乐',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false}})
- secureWindow(win);loadRenderer(win,lyric)
- if(!lyric)win.webContents.once('did-finish-load',()=>{const links=pendingDeepLinks;pendingDeepLinks=[];for(const link of links)handleDeepLink(link)})
- win.once('ready-to-show',()=>{if(lyric)win.showInactive();else {if(!startup.hidden)win.show();if(library.get().settings.startInFullscreen)win.setFullScreen(true);desktop?.status(status,library.get().settings)}win.webContents.send('lyric.status',status)})
+ let suppressAutomaticShow=false
+ secureWindow(win)
+ if(!lyric)win.webContents.once('did-finish-load',()=>{
+  void startupReady?.then(()=>{if(!coreReady||quitting||win.isDestroyed())return;drainStartupRequests();if(!startupArgsTimer){startupArgsTimer=setTimeout(()=>{startupArgsTimer=undefined;if(!quitting)void handleStartupArgs(process.argv)},500)}if(startup.openDevTools)win.webContents.openDevTools({mode:'detach'})}).catch(()=>{})
+ })
+ win.once('ready-to-show',()=>{void startupReady?.then(()=>{
+  if(!coreReady||quitting||win.isDestroyed())return
+  if(!lyric){if(library.get().settings.startInFullscreen)win.setFullScreen(true);if((!startup.hidden||showRequested)&&!suppressAutomaticShow)win.show()}
+  // DesktopService owns lyric visibility, including restored pause/lock preferences.
+  desktop.status(status,library.get().settings);win.webContents.send('lyric.status',status)
+ }).catch(()=>{})})
  if(!lyric){let closing=false;win.on('close',event=>{
    if(quitting)return
-   event.preventDefault();if(closing)return;closing=true
+   event.preventDefault();if(closing)return;closing=true;suppressAutomaticShow=true
    void (async()=>{
+    await startupReady
+    if(!coreReady||quitting||win.isDestroyed())return
     const settings=library.get().settings
     let behavior=settings.closeBehavior||'ask',remember=false
     if(behavior==='ask'){
      const language=settings.language,text=language==='en-US'?{title:'Close main window',message:'Keep music playing in the background or exit?',detail:'Hide to tray keeps playback running. Exit stops playback and closes the application.',buttons:['Hide to tray','Exit','Cancel'],checkbox:'Do not ask again',error:'Unable to close the window'}:language==='zh-TW'?{title:'關閉主視窗',message:'隱藏到系統匣，還是退出程式？',detail:'隱藏到系統匣會繼續播放；退出程式會停止播放並關閉應用程式。',buttons:['隱藏到系統匣','退出程式','取消'],checkbox:'下次不再詢問',error:'無法關閉視窗'}:{title:'关闭主窗口',message:'隐藏到托盘，还是退出程序？',detail:'隐藏到托盘会继续播放；退出程序会停止播放并关闭应用。',buttons:['隐藏到托盘','退出程序','取消'],checkbox:'下次不再询问',error:'无法关闭窗口'}
      const choice=await dialog.showMessageBox(win,{type:'question',title:text.title,message:text.message,detail:text.detail,buttons:text.buttons,defaultId:0,cancelId:2,noLink:true,checkboxLabel:text.checkbox,checkboxChecked:false})
-     if(quitting||win.isDestroyed()||choice.response===2||![0,1].includes(choice.response))return
+     if(quitting||win.isDestroyed())return
+     if(choice.response===2||![0,1].includes(choice.response)){if(!startup.hidden||showRequested)win.show();return}
      behavior=choice.response===0?'tray':'quit';remember=choice.checkboxChecked
     }
     if(quitting||win.isDestroyed())return
@@ -126,6 +143,7 @@ function createWindow(lyric=false) {
     quitting=true;app.quit()
    })().catch(error=>{if(!quitting&&!win.isDestroyed()){win.show();win.focus();emit('app.error',{message:`关闭窗口失败：${error}`})}}).finally(()=>{closing=false})
   });win.on('closed',()=>{mainWindow=undefined})}
+ loadRenderer(win,lyric)
  return win
 }
 function assertSender(event:Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) {
@@ -202,7 +220,9 @@ async function resolveTrack(raw:Track,q:Quality,proxy=true):Promise<string> {
 async function chooseOpen(filters:Electron.FileFilter[],multiple=false) {const options:Electron.OpenDialogOptions={filters,properties:multiple?['openFile','multiSelections']:['openFile']};const result=mainWindow?await dialog.showOpenDialog(mainWindow,options):await dialog.showOpenDialog(options);return result.canceled?[]:result.filePaths}
 async function importFiles(params:any):Promise<Track[]> {
  const paths=await chooseOpen([{name:'音乐文件',extensions:['mp3','flac','wav','m4a','aac','ogg','opus','wma','aiff']}],true)
- const tracks:Track[]=[];const failures:string[]=[]
+ if(!paths.length)return []
+  const {parseFile}=await import('music-metadata')
+  const tracks:Track[]=[];const failures:string[]=[]
  for(const file of paths){try{const path=await realpath(file);const meta=await parseFile(path,{duration:true});const id=`local:${createHash('sha256').update(path).digest('hex').slice(0,24)}`;tracks.push({id,name:meta.common.title||basename(path,extname(path)),singer:meta.common.artist||meta.common.artists?.join(' / ')||'未知歌手',source:'local',interval:formatTime(meta.format.duration||0),meta:{songId:id,albumName:meta.common.album||'',filePath:path,ext:extname(path).slice(1),duration:meta.format.duration,bitrate:meta.format.bitrate,picUrl:meta.common.picture?.[0]?`data:${meta.common.picture[0].format};base64,${Buffer.from(meta.common.picture[0].data).toString('base64')}`:null}});localFiles.add(path)}catch(error){failures.push(`${basename(file)}：${error instanceof Error?error.message:String(error)}`)}}
  if(!tracks.length&&failures.length)throw new Error(`音乐导入失败：${failures.join('；')}`)
  for(const track of tracks)importedTracks.set(track.id,track)
@@ -299,7 +319,7 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
   case 'search.suggest':{if(params.source==='local')return [...new Set(library.get().playlists.flatMap(p=>p.tracks).filter(t=>t.source==='local'&&t.name.toLocaleLowerCase().includes(String(params.keyword??'').toLocaleLowerCase())).map(t=>t.name))].slice(0,8);return providers.getSuggestions(source(params.source==='all'?'wy':params.source),String(params.keyword??''))}
   case 'playback.alternatives':{const track=normalizeTrack(params.track);const results=await providers.search('all',`${track.name} ${track.singer}`,1,10);return rankAlternativeTracks(track,results.list)}
    case 'playback.resolve':{const q=quality(params.quality??library.get().settings.quality);return resolveTrack(params.track,q)}
-  case 'playback.status':{if(senderId!==mainWindow?.webContents.id)throw new Error('播放状态只能由主窗口提供');const raw=params.status&&typeof params.status==='object'?params.status:params;const next={...status};if(Array.isArray(raw.spectrum)&&raw.spectrum.length===16&&raw.spectrum.every((value:unknown)=>typeof value==='number'&&Number.isFinite(value)))next.spectrum=raw.spectrum.map((value:number)=>Math.max(0,Math.min(1,value)));else delete next.spectrum;for(const key of Object.keys(initialPlayerStatus) as (keyof PlayerStatus)[]){if(typeof raw[key]===typeof initialPlayerStatus[key])(next as any)[key]=raw[key]}if(!['playing','paused','stoped','loading','error'].includes(next.status))throw new Error('播放状态无效');status=next;if(Date.now()-lastProgressSave>5000){lastProgressSave=Date.now();savePlaybackProgress()}api.publish(status);desktop.status(status,library.get().settings);emit('player.status',status);emit('lyric.status',status);return true}
+  case 'playback.status':{if(senderId!==mainWindow?.webContents.id)throw new Error('播放状态只能由主窗口提供');const raw=params.status&&typeof params.status==='object'?params.status:params;const next={...status};if(Array.isArray(raw.spectrum)&&raw.spectrum.length===16&&raw.spectrum.every((value:unknown)=>typeof value==='number'&&Number.isFinite(value)))next.spectrum=raw.spectrum.map((value:number)=>Math.max(0,Math.min(1,value)));else delete next.spectrum;for(const key of Object.keys(initialPlayerStatus) as (keyof PlayerStatus)[]){if(typeof raw[key]===typeof initialPlayerStatus[key])(next as any)[key]=raw[key]}if(!['playing','paused','stoped','loading','error'].includes(next.status))throw new Error('播放状态无效');status=next;rendererStatusReceived=true;if(Date.now()-lastProgressSave>5000){lastProgressSave=Date.now();savePlaybackProgress()}api.publish(status);desktop.status(status,library.get().settings);emit('player.status',status);emit('lyric.status',status);return true}
   case 'playback.snapshot':return structuredClone(status)
    case 'playback.command':{if(!['toggle','play','pause','stop','next','prev','previous','seek','volume','mute','collect','rate','mode'].includes(params.action))throw new Error('播放控制命令无效');mainWindow?.webContents.send('player.command',{action:params.action,value:params.value});return true}
   case 'downloads.add':if(!Array.isArray(params.tracks))throw new Error('请提供下载歌曲列表');return downloads.add(params.tracks,quality(params.quality??library.get().settings.quality),typeof params.playlistName==='string'?params.playlistName:params.playlistId?library.get().playlists.find(list=>list.id===params.playlistId)?.name:undefined)
@@ -326,8 +346,16 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
  }
 }
 let pendingDeepLinks:string[]=[]
+let pendingStartupArgs:string[][]=[]
+function drainStartupRequests(){
+ if(!coreReady||quitting||!mainWindow||mainWindow.isDestroyed()||mainWindow.webContents.isLoading())return
+ const links=pendingDeepLinks,args=pendingStartupArgs;pendingDeepLinks=[];pendingStartupArgs=[]
+ for(const link of links)handleDeepLink(link)
+ for(const request of args)void handleStartupArgs(request)
+}
 function handleDeepLink(raw:string) {
- if(!mainWindow||mainWindow.webContents.isLoading()){pendingDeepLinks.push(raw);return}
+ if(quitting)return
+ if(!coreReady||!mainWindow||mainWindow.webContents.isLoading()){pendingDeepLinks.push(raw);return}
  void (async()=>{
   const parsed=parseDeepLink(raw,!!library.get().settings.associateLegacyScheme)
   mainWindow?.show();mainWindow?.focus()
@@ -345,6 +373,8 @@ function handleDeepLink(raw:string) {
  })().catch(error=>emit('app.error',{message:`链接打开失败：${error instanceof Error?error.message:String(error)}`}))
 }
 async function handleStartupArgs(args:string[]){
+ if(quitting)return
+ if(!coreReady||!mainWindow||mainWindow.webContents.isLoading()){pendingStartupArgs.push(args);return}
  const options=parseStartup(args)
  for(const link of options.links)handleDeepLink(link)
  if(options.search)handleDeepLink(`chenjinmusic://search?source=all&keyword=${encodeURIComponent(options.search)}`)
@@ -369,32 +399,63 @@ function createDownloadManager() {
 function createSourceRuntime() {
  return new SourceRuntime(script=>{void library.mutate(s=>{const index=s.scripts.findIndex(x=>x.id===script.id);if(index>=0)s.scripts[index]=script}).then(()=>emit('sources.updated',library.get().scripts)).catch(error=>emit('app.error',{message:String(error)}))})
 }
-async function start() {
- library=new LibraryStore(join(app.getPath('userData'),'chenjin.data.db'),state=>{emit('library.updated',state);sync?.notifyLocalChange(state)});await library.load();if(startup.hidden&&!library.get().settings.tray)await library.settings({tray:true})
-  sync=new SyncService(()=>library.get(),async patch=>{await library.mutate(state=>{if(patch.playlists)state.playlists=patch.playlists;if(patch.dislikes)state.dislikes=patch.dislikes})},emit,join(app.getPath('userData'),'sync'))
-  updates=new UpdateService(emit)
-  lyricCache=new LyricCache(join(app.getPath('userData'),'lyric-cache'))
-  editedLyrics=new LyricCache(join(app.getPath('userData'),'lyrics-edited'))
-  await configureProxy(library.get().settings.proxy)
+async function initializeCore(){
+ library=new LibraryStore(join(app.getPath('userData'),'chenjin.data.db'),state=>{emit('library.updated',state);sync?.notifyLocalChange(state)})
+ await library.load();if(quitting)return
+ if(startup.hidden&&!library.get().settings.tray){await library.settings({tray:true});if(quitting)return}
+ sync=new SyncService(()=>library.get(),async patch=>{await library.mutate(state=>{if(patch.playlists)state.playlists=patch.playlists;if(patch.dislikes)state.dislikes=patch.dislikes})},emit,join(app.getPath('userData'),'sync'))
+ updates=new UpdateService(emit)
+ lyricCache=new LyricCache(join(app.getPath('userData'),'lyric-cache'))
+ editedLyrics=new LyricCache(join(app.getPath('userData'),'lyrics-edited'))
+ await configureProxy(library.get().settings.proxy);if(quitting)return
  runtime=createSourceRuntime()
+ // DownloadManager resumes saved jobs in its constructor: never construct it on empty state.
  downloads=createDownloadManager()
  desktop=new DesktopService(()=>mainWindow,()=>createWindow(true),command,{},async patch=>{await library.settings(patch)})
  api=new OpenAPIService(()=>status,command)
- await registerMedia()
- ipcMain.handle('chenjin:invoke',async(event,method,params)=>{try{assertSender(event);return await invoke(method,params,event.sender.id)}catch(error){throw new Error(error instanceof Error?`操作失败：${error.message}`:'操作失败，请重试')}})
- ipcMain.on('chenjin:window',(event,action)=>{try{assertSender(event);const win=BrowserWindow.fromWebContents(event.sender)!;switch(action){case 'minimize':win.minimize();break;case 'maximize':win.isMaximized()?win.unmaximize():win.maximize();break;case 'close':win.close();break;case 'fullscreen':win.setFullScreen(!win.isFullScreen());break}}catch{}})
- Menu.setApplicationMenu(null);if(app.isPackaged){app.setAsDefaultProtocolClient('chenjinmusic');if(library.get().settings.associateLegacyScheme)app.setAsDefaultProtocolClient('lxmusic')}mainWindow=createWindow();mainWindow.webContents.once('did-finish-load',()=>{setTimeout(()=>void handleStartupArgs(process.argv),500);if(startup.openDevTools)mainWindow?.webContents.openDevTools({mode:'detach'})});desktop.apply(library.get().settings);desktop.registerHotkeys()
- try{await api.configure(library.get().settings);await sync.configure(library.get().settings)}catch(error){emit('app.error',{message:String(error)})}
+ if(app.isPackaged){if(!app.isDefaultProtocolClient('chenjinmusic'))app.setAsDefaultProtocolClient('chenjinmusic');if(library.get().settings.associateLegacyScheme&&!app.isDefaultProtocolClient('lxmusic'))app.setAsDefaultProtocolClient('lxmusic')}
+ desktop.apply(library.get().settings);desktop.registerHotkeys()
+ coreReady=true
+}
+async function start() {
+ if(quitting)return
+ await registerMedia();if(quitting)return
+ // Assigned before creating any renderer. Observe failure immediately even when first paint is slow.
+ startupReady=initializeCore();void startupReady.catch(()=>{})
+ ipcMain.handle('chenjin:invoke',async(event,method,params)=>{try{
+  assertSender(event);await startupReady
+  if(!coreReady)throw new Error('应用尚未完成初始化')
+  // The sender may navigate or disappear while initialization is pending.
+  assertSender(event);return await invoke(method,params,event.sender.id)
+ }catch(error){throw new Error(error instanceof Error?`操作失败：${error.message}`:'操作失败，请重试')}})
+ ipcMain.on('chenjin:window',(event,action)=>{try{
+  assertSender(event)
+  void startupReady?.then(()=>{if(!coreReady||quitting)return;assertSender(event);const win=BrowserWindow.fromWebContents(event.sender);if(!win||win.isDestroyed())return;switch(action){case 'minimize':win.minimize();break;case 'maximize':win.isMaximized()?win.unmaximize():win.maximize();break;case 'close':win.close();break;case 'fullscreen':win.setFullScreen(!win.isFullScreen());break}}).catch(()=>{})
+ }catch{}})
+ Menu.setApplicationMenu(null);mainWindow=createWindow()
+ await startupReady;if(!coreReady||quitting)return
+ drainStartupRequests()
+ // Network listeners and user-source activation stay off the hydration critical path.
+ // Retain the configuration promise so exit cannot dispose a server before it finishes opening.
+ startupServicesReady=(async()=>{try{await api.configure(library.get().settings);if(!quitting)await sync.configure(library.get().settings)}catch(error){if(!quitting)emit('app.error',{message:String(error)})}})()
+ await startupServicesReady;if(quitting)return
  listRefreshTimer=setInterval(()=>void refreshAssociatedLists(),300000);listRefreshTimer.unref()
- const active=library.get().scripts.find(x=>x.enabled);if(active)try{await runtime.activate(active)}catch(error){emit('app.error',{message:`音源初始化失败：${error}`})}
+ const active=library.get().scripts.find(x=>x.enabled);if(active)try{await runtime.activate(active)}catch(error){if(!quitting)emit('app.error',{message:`音源初始化失败：${error}`})}
 }
 if(!app.requestSingleInstanceLock())app.quit()
 else {
  app.on('open-url',(event,url)=>{event.preventDefault();handleDeepLink(url)})
- app.on('second-instance',(_event,args)=>{const options=parseStartup(args);if(!options.hidden){mainWindow?.show();mainWindow?.focus()}void handleStartupArgs(args)})
- void app.whenReady().then(start).catch(error=>{dialog.showErrorBox('琛瑾音乐启动失败',String(error));app.quit()})
- app.on('activate',()=>{if(!mainWindow)mainWindow=createWindow();else mainWindow.show()})
- app.on('window-all-closed',()=>{if(process.platform!=='darwin'&&!library?.get().settings.tray)app.quit()})
+ app.on('second-instance',(_event,args)=>{const options=parseStartup(args);if(!options.hidden){showRequested=true;if(coreReady&&!quitting){mainWindow?.show();mainWindow?.focus()}}void handleStartupArgs(args)})
+ void app.whenReady().then(start).catch(error=>{if(!quitting)dialog.showErrorBox('琛瑾音乐启动失败',String(error));app.quit()})
+ app.on('activate',()=>{if(quitting)return;showRequested=true;if(!coreReady)return;if(!mainWindow)mainWindow=createWindow();else mainWindow.show()})
+ app.on('window-all-closed',()=>{if(process.platform!=='darwin'&&(!coreReady||!library.get().settings.tray))app.quit()})
  let cleanupComplete=false,cleanupStarted=false
- app.on('before-quit',event=>{if(cleanupComplete)return;event.preventDefault();if(cleanupStarted)return;cleanupStarted=true;quitting=true;if(listRefreshTimer)clearInterval(listRefreshTimer);void (async()=>{await flushRenderer();desktop?.dispose();downloads?.dispose();runtime?.dispose();savePlaybackProgress();await Promise.all([library?.close(),api?.dispose(),sync?.dispose()])})().catch(error=>console.error('退出清理失败',error)).finally(()=>{cleanupComplete=true;app.quit()})})
+ app.on('before-quit',event=>{if(cleanupComplete)return;event.preventDefault();if(cleanupStarted)return;cleanupStarted=true;quitting=true;if(listRefreshTimer)clearInterval(listRefreshTimer);if(startupArgsTimer)clearTimeout(startupArgsTimer);void (async()=>{
+  // Finish/cancel in-flight SQLite/proxy work before disposing partially initialized services.
+  await startupReady?.catch(()=>{})
+  await startupServicesReady?.catch(()=>{})
+  if(coreReady)await flushRenderer()
+  desktop?.dispose();downloads?.dispose();runtime?.dispose();savePlaybackProgress()
+  await Promise.all([library?.close(),api?.dispose(),sync?.dispose()])
+ })().catch(error=>console.error('退出清理失败',error)).finally(()=>{cleanupComplete=true;app.quit()})})
 }

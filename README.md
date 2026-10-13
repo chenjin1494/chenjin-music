@@ -2,6 +2,10 @@
 
 全新编写的音乐桌面客户端。Electron + Vue + TypeScript，Material You / Material 3 动态配色与深浅界面，独立的应用标识、数据目录和原创品牌图标。参照 LX Music Desktop 的功能与开放协议，从零编写业务代码；原项目保持只读。
 
+## 当前版本与启动
+
+当前版本为 **0.1.0**，按用户要求重置；功能继续包含 Material 3、40 类组件外观、Windows 媒体会话、桌面歌词与关闭选择。只有用户明确要求时才修改版本号，见 [协作约定](AGENTS.md)。非首屏面板及音频解析／标签库按需加载。启动验证方法与结果见 [启动说明](docs/STARTUP.md)。
+
 ## 开发
 
 需要 Node.js 22 或更新版本、pnpm。
@@ -29,11 +33,11 @@ Windows 面向 Windows 10/11 x64；Linux 输出 AppImage 和 deb；macOS 配置 
 
 本项目不附带第三方收费音乐授权或内置播放音源。外部平台接口需要正常网络，并可能因平台改变或服务限制而暂时不可用；真实探测结果在验证报告中记录。
 
-## 桌面歌词与关闭窗口（0.5.0）
+## 桌面歌词与关闭窗口
 
 桌面歌词支持 UTF-8、UTF-16 LE／BE 和 GB18030，修复 Windows 歌词误解码；中文字体回退、长句自适应、下一句预览、工具栏、托盘解锁和位置恢复完善。主窗口关闭默认询问“隐藏到托盘／退出程序／取消”，可勾选“下次不再询问”；设置 → 桌面与网络 → 关闭主窗口时可恢复“每次询问”。详见 [使用说明](docs/DESKTOP_LYRICS.md)。完整回归 **287 项**、真实歌词 **15 项**、关闭选择 **9 项**验收通过。
 
-## Material You / Material 3（0.4.0）
+## Material You / Material 3
 
 官方 HCT Tonal Spot 根据强调色生成协调的主色、容器、表面和文字色，深浅主题自动配套；导航、胶囊搜索、卡片、播放器、设置和弹窗统一采用 Material 3 形状与状态层。设置里改变强调色即可换肤，40 类组件自定义继续生效。完全未修改的旧默认自动迁移，其他配置保留。详见 [设计说明](docs/MATERIAL_DESIGN.md)。Windows 完整回归 **272 项通过**，真实 Material 界面 **11 项**、原有外观 **14 项**、设置 **6 项**检查通过。
 
@@ -41,11 +45,11 @@ Windows 面向 Windows 10/11 x64；Linux 输出 AppImage 和 deb；macOS 配置 
 
 打开 [Actions → Build desktop app](https://github.com/chenjin1494/chenjin-music/actions/workflows/build.yml)，点击 **Run workflow**，可选 Windows、Linux、macOS 或全部平台。默认构建 Windows，完成后从该次运行的 **Artifacts** 下载安装包／便携包及 SHA-256 校验文件。详见 [构建说明](docs/GITHUB_BUILD.md)。Git 只保存源码、必要资源和测试输入，构建目录及安装包不会提交。
 
-## Windows 系统媒体会话（0.3.0）
+## Windows 系统媒体会话
 
 播放后 Windows 系统媒体面板显示歌曲名、歌手、状态和时间轴，可播放／暂停、切歌和定位，隐藏主窗口后仍可控制。标准媒体键交给系统当前会话，避免全局抢占和双重触发。详见 [系统媒体会话说明](docs/WINDOWS_MEDIA_SESSION.md)。本次新增发布 Windows 安装／便携包和源码，Linux 二进制保留 0.2.0。
 
-## 外观自定义（0.2.0）
+## 外观自定义
 
 设置 → 外观与体验 → **组件外观工作室**。全局与 40 类组件可独立修改颜色、圆角、间距、字体、透明度、阴影、尺寸、列表行高和图标描边；支持预设、继承、确认重置、完整 JSON 编辑与 `.appearance.json` 文件导入／导出。
 

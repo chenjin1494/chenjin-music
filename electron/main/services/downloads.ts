@@ -2,7 +2,7 @@ import { net } from 'electron'
 import { mkdir, stat, open, rename, writeFile, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import NodeID3 from 'node-id3'
+import type NodeID3 from 'node-id3'
 import iconv from 'iconv-lite'
 import type { LibraryState, Track, Quality, DownloadTask } from '../../../src/shared/types'
 import { getLyrics } from './providers'
@@ -85,7 +85,7 @@ export class DownloadManager {
     const tags:any={title:task.track.name,artist:task.track.singer,album:task.track.meta.albumName}
     if(embeddedLyrics)tags.unsynchronisedLyrics={language:'chi',text:embeddedLyrics}
     if(cover)tags.image=cover
-    const tagged=NodeID3.update(tags,part);if(tagged instanceof Error)throw tagged;if(tagged!==true)throw new Error('音频已下载，但标签写入失败')
+    const {default:tagger}=await import('node-id3');const tagged=tagger.update(tags,part);if(tagged instanceof Error)throw tagged;if(tagged!==true)throw new Error('音频已下载，但标签写入失败')
    }
    if(lyrics?.lyric && settings.downloadLyrics){const encoding=settings.lyricEncoding==='gbk'?'gbk':'utf8';await writeFile(target.replace(/\.[^.]+$/,'.lrc'),iconv.encode(lyrics.lyric,encoding));if(lyrics.tlyric&&settings.downloadTranslation!==false)await writeFile(target.replace(/\.[^.]+$/,'.translation.lrc'),iconv.encode(lyrics.tlyric,encoding));if(lyrics.rlyric&&settings.downloadRoman!==false)await writeFile(target.replace(/\.[^.]+$/,'.roman.lrc'),iconv.encode(lyrics.rlyric,encoding));if(lyrics.lxlyric&&settings.downloadWordLyrics!==false)await writeFile(target.replace(/\.[^.]+$/,'.lx.lrc'),lyrics.lxlyric,'utf8')}
    if(controller.signal.aborted)throw new Error('已取消')

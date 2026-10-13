@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { Track, SourceId, SearchResult, OnlinePlaylist, Comment, PlayerStatus, Playlist } from '../../shared/types'
 import { sourceNames, formatTime } from '../../shared/defaults'
 import { useMusic, bridge, invoke } from './store'
@@ -8,15 +8,6 @@ import { dislikeRule } from '../../shared/dislike'
 import Icon from './components/Icon.vue'
 import TrackList from './components/TrackList.vue'
 import PlayerBar from './components/PlayerBar.vue'
-import SettingsPanel from './components/SettingsPanel.vue'
-import LyricsView from './components/LyricsView.vue'
-import QueueDrawer from './components/QueueDrawer.vue'
-import OnlinePanel from './components/OnlinePanel.vue'
-import TrackDetails from './components/TrackDetails.vue'
-import DesktopLyrics from './components/DesktopLyrics.vue'
-import SourceAlternatives from './components/SourceAlternatives.vue'
-import DownloadsPanel from './components/DownloadsPanel.vue'
-import CommentsPanel from './components/CommentsPanel.vue'
 import { trackMetadataTarget, type OnlineTarget } from './domain/online'
 import {applyAppearance} from './domain/appearance'
 import {normalizeAppearance} from '../../shared/appearance'
@@ -27,6 +18,16 @@ import { shortcutMatches } from './domain/shortcuts'
 import { convertLyric, ensureLyricConversion } from './domain/lyric-text'
 import { installInterfaceTranslation, normalizeInterfaceLanguage, t } from './i18n'
 import './interface-translations'
+// Vue caches each resolved component; unopened panels do not enter the startup bundle.
+const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
+const LyricsView = defineAsyncComponent(() => import('./components/LyricsView.vue'))
+const QueueDrawer = defineAsyncComponent(() => import('./components/QueueDrawer.vue'))
+const OnlinePanel = defineAsyncComponent(() => import('./components/OnlinePanel.vue'))
+const TrackDetails = defineAsyncComponent(() => import('./components/TrackDetails.vue'))
+const DesktopLyrics = defineAsyncComponent(() => import('./components/DesktopLyrics.vue'))
+const SourceAlternatives = defineAsyncComponent(() => import('./components/SourceAlternatives.vue'))
+const DownloadsPanel = defineAsyncComponent(() => import('./components/DownloadsPanel.vue'))
+const CommentsPanel = defineAsyncComponent(() => import('./components/CommentsPanel.vue'))
 let interfaceTranslation: ReturnType<typeof installInterfaceTranslation> | undefined
 const systemAppearance=matchMedia('(prefers-color-scheme: light)'),systemLight=ref(systemAppearance.matches)
 function systemAppearanceChanged(event:MediaQueryListEvent):void{systemLight.value=event.matches}

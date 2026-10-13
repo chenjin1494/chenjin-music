@@ -1,6 +1,6 @@
 {
   "name": "chenjin-music",
-  "version": "0.5.0",
+  "version": "0.1.0",
   "description": "琛瑾音乐 — 为每一次聆听而设计",
   "homepage": "https://github.com/chenjin1494/chenjin-music",
   "repository": {
@@ -58,6 +58,7 @@
     "files": [
       "out/**/*",
       "README.md",
+      "AGENTS.md",
       "LICENSE",
       "THIRD_PARTY_NOTICES.md",
       "docs/**/*.md",

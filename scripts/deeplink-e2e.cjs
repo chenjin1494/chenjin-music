@@ -30,6 +30,7 @@ async function main() {
     page.on('pageerror', error => report.runtimeErrors.push(error.message))
     await page.waitForFunction(() => document.querySelector('#app')?.__vue_app__?.config.globalProperties.$pinia?._s.get('music')?.hydrated)
     lastLaunch = { args, url: page.url(), visible: await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()) }
+    if(!args.includes('--hidden')){await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isVisible())).toBe(true);lastLaunch.visible=true}
     report.sessions.push(lastLaunch)
     const info = await call('app.info')
     check('Temporary userData verified before writes', path.resolve(info.userData) === path.resolve(userData), info)
@@ -123,6 +124,7 @@ async function main() {
     await launch(['--hidden', '--search=冷启动 中文搜索'])
     lastLaunch.initialVisibility = lastLaunch.visible
     await page.waitForFunction(() => document.querySelector('.search-input')?.value === '冷启动 中文搜索')
+    await expect(page.locator('main h1')).toContainText('冷启动 中文搜索')
     const coldSearch = await page.evaluate(() => ({ input: document.querySelector('.search-input').value, heading: document.querySelector('main h1')?.textContent, events: window.__deeplinkEvents.filter(event => event.action === 'search') }))
     check('Hidden startup creates an initially hidden window before command routing', !lastLaunch.initialVisibility, lastLaunch)
     check('Cold --search argument reaches actual Chinese search UI once', coldSearch.input === '冷启动 中文搜索' && coldSearch.heading?.includes('冷启动 中文搜索') && coldSearch.events.length === 1, coldSearch)
