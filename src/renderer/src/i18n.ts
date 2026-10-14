@@ -113,6 +113,7 @@ const dictionary: Record<string, TranslationEntry> = Object.fromEntries(`
 管理歌单|Manage playlists
 创建新歌单|Create a new playlist
 添加到歌单|Add to playlist
+还没有自定义歌单|No custom playlists yet
 关闭弹窗|Close dialog
 歌单名称|Playlist name
 给这份心情取个名字|Give this mood a name
@@ -150,6 +151,8 @@ const dictionary: Record<string, TranslationEntry> = Object.fromEntries(`
 此刻，留给音乐|This moment is for music
 选择一首歌曲开始聆听|Choose a song to start listening
 收藏当前歌曲|Favorite current song
+加入收藏|Add to favorites
+移出收藏|Remove from favorites
 列表循环|Repeat all
 随机播放|Shuffle
 顺序播放|Play in order
@@ -162,6 +165,11 @@ const dictionary: Record<string, TranslationEntry> = Object.fromEntries(`
 静音|Mute
 音量|Volume
 桌面歌词|Desktop lyrics
+水平对齐|Horizontal alignment
+仅横向排列时生效|Only applies to horizontal lyrics
+左对齐|Left aligned
+居中|Center aligned
+右对齐|Right aligned
 打开播放队列|Open play queue
 播放队列|Play queue
 关闭播放队列|Close play queue
@@ -172,6 +180,7 @@ const dictionary: Record<string, TranslationEntry> = Object.fromEntries(`
 拖动歌曲调整顺序|Drag songs to reorder
 队列空空，先选一首喜欢的歌。|The queue is empty. Choose a song you love first.
 完整歌词|Full lyrics
+播放音频可视化|Playback audio visualization
 关闭歌词|Close lyrics
 让音乐慢慢响起|Let the music begin
 选择一首歌，开启聆听|Choose a song and start listening

@@ -22,6 +22,7 @@ const sort = ref('hot'), tag = ref('')
 const tags = ref<Tag[]>([]), playlists = ref<OnlinePlaylist[]>([])
 const boards = ref<{ id: string; name: string }[]>([]), board = ref('')
 const tracks = ref<Track[]>([]), total = ref(0), page = ref(1), limit = 30
+const discoveryPlaylistLimit = 25
 const busy = ref(false), error = ref(''), failures = ref('')
 const detail = ref<PlaylistDetail>()
 const metadata = ref<MetadataResult>()
@@ -34,7 +35,7 @@ const visibleTracks = computed(() => {
   return query ? pool.filter(track => `${track.name} ${track.singer} ${track.meta.albumName}`.toLowerCase().includes(query)) : pool
 })
 const groups = computed(() => [...new Set(tags.value.map(item => item.group || '分类'))])
-const hasNext = computed(() => props.view === 'discovery' ? (discoveryTab.value === 'playlists' ? playlists.value.length > 0 : tracks.value.length >= limit) : page.value * limit < total.value)
+const hasNext = computed(() => props.view === 'discovery' ? (discoveryTab.value === 'playlists' ? playlists.value.length >= discoveryPlaylistLimit : tracks.value.length >= limit) : page.value * limit < total.value)
 const label = computed(() => selectedSource.value === 'all' ? '全部平台' : sourceNames[selectedSource.value])
 const playlistView = computed(() => props.view === 'discovery' && discoveryTab.value === 'playlists' || props.view === 'search' && tab.value === 'playlists')
 
@@ -70,9 +71,9 @@ async function load(): Promise<void> {
       if (token !== request) return
       metadata.value = result; tracks.value = result.list; total.value = result.total
     } else if (discoveryTab.value === 'playlists') {
-      const result = await invoke<OnlinePlaylist[]>('discovery.playlists', { source: selectedSource.value, page: page.value, tag: tag.value || undefined, sort: sort.value })
+      const result = await invoke<OnlinePlaylist[]>('discovery.playlists', { source: selectedSource.value, page: page.value, tag: tag.value || undefined, sort: sort.value, limit: discoveryPlaylistLimit })
       if (token !== request) return
-      playlists.value = result
+      playlists.value = result.slice(0, discoveryPlaylistLimit)
     } else if (board.value) {
       const result = await invoke<SearchResult>('discovery.board', { source: selectedSource.value, id: board.value, page: page.value })
       if (token !== request) return
@@ -173,5 +174,6 @@ onMounted(() => props.importAddress ? undefined : props.view === 'discovery' ? v
 </template>
 
 <style scoped>
+.tabs { margin-block-end: 16px; padding-block-end: 8px; }
 .online-back { margin-bottom: 20px; }.online-description { max-height: 70px; overflow: auto; }.discovery-filters { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--surface); margin-bottom: 20px; }.discovery-filters>.section-title { margin-bottom: 15px; font-size: 12px; }.discovery-filters select { font-size: 10px; padding: 6px 10px; }.tag-groups { max-height: 170px; overflow: auto; }.tag-group { display: flex; gap: 15px; padding: 8px 0; }.tag-group>span { color: var(--muted); font-size: 10px; width: 45px; flex-shrink: 0; padding-top: 7px; }.tag-group .chips { margin: 0; }.online-import { border: 1px solid var(--border); border-radius: 10px; padding: 17px 20px; margin: 20px 0 25px; background: var(--surface); }.online-import>label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 12px; }.online-import input { flex: 1; min-width: 120px; font-size: 11px; }.provider-failures { font-size: 11px; color: var(--muted); line-height: 1.8; margin: 15px 0; }@media(max-width:640px){.discovery-filters{padding:15px}.tag-group{gap:10px}.tag-group>span{width:35px}.online-import{padding:15px}.page-heading select{max-width:110px}}
 </style>

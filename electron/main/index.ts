@@ -69,7 +69,8 @@ const mediaFiles=new Map<string,string>()
 const localFiles=new Set<string>()
 const importedTracks=new Map<string,Track>()
 const trustedWindows=new Set<number>()
-const methods=new Set(['library.load','app.flushReady','library.save','settings.update','files.import','audio.importImpulse','theme.importImage','playlists.create','playlists.rename','playlists.remove','playlists.add','playlists.removeTracks','playlists.reorder','playlists.sort','playlists.dedupe','playlists.transfer','playlists.order','playlists.refresh','discovery.tags','search.playlists','metadata.detail','discovery.album','discovery.singer','backup.import','backup.importLegacyDirectory','backup.export','backup.exportText','sources.importURL','sources.import','sources.activate','sources.remove','search','discovery.playlists','discovery.playlist','discovery.boards','discovery.board','lyrics','lyrics.save','comments','search.hot','search.suggest','playback.resolve','playback.alternatives','playback.status','playback.snapshot','playback.command','downloads.add','downloads.action','desktop.lyric','desktop.showMain','desktop.resetPosition','desktop.lock','desktop.top','app.info','app.openExternal','app.openPath','app.selectDirectory','update.check','update.download','update.cancel','update.install','sync.status','sync.auth','sync.mode','sync.device.remove','cache.clear','cache.stats'])
+const methods=new Set(['library.load','app.flushReady','library.save','settings.update','files.import','audio.importImpulse','theme.importImage','playlists.create','playlists.rename','playlists.remove','playlists.add','playlists.removeTracks','playlists.reorder','playlists.sort','playlists.dedupe','playlists.transfer','playlists.order','playlists.refresh','discovery.tags','search.playlists','metadata.detail','discovery.album','discovery.singer','backup.import','backup.importLegacyDirectory','backup.export','backup.exportText','sources.importURL','sources.import','sources.activate','sources.remove','search','discovery.playlists','discovery.playlist','discovery.boards','discovery.board','lyrics','lyrics.save','comments','search.hot','search.suggest','playback.resolve','playback.alternatives','playback.status','playback.snapshot','playback.command','downloads.add','downloads.action','desktop.lyric','desktop.showMain','desktop.resetPosition','desktop.lock','desktop.top','desktop.gesture','app.info','app.openExternal','app.openPath','app.selectDirectory','update.check','update.download','update.cancel','update.install','sync.status','sync.auth','sync.mode','sync.device.remove','cache.clear','cache.stats'])
+if(process.env.CHENJIN_TEST_USER_DATA)methods.add('desktop.diagnostics')
 const emit=(event:string,data:unknown)=>{for(const win of BrowserWindow.getAllWindows()){if(trustedWindows.has(win.webContents.id)&&!win.isDestroyed())win.webContents.send(event,data)}}
 const command=(command:string,value?:unknown)=>{
  if(command==='windowMinimize'){mainWindow?.minimize();return}
@@ -104,7 +105,7 @@ function loadRenderer(win:BrowserWindow,lyric=false) {
  else void win.loadFile(join(__dirname,'../renderer/index.html'),lyric?{query:{lyric:'1'}}:undefined)
 }
 function createWindow(lyric=false) {
- const win=new BrowserWindow({width:lyric?900:1360,height:lyric?160:880,minWidth:lyric?400:960,minHeight:lyric?90:640,show:false,frame:false,transparent:lyric,backgroundColor:lyric?'#00000000':'#111118',resizable:true,skipTaskbar:lyric,alwaysOnTop:lyric,title:'琛瑾音乐',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false}})
+ const win=new BrowserWindow({width:lyric?900:1360,height:lyric?160:880,minWidth:lyric?400:960,minHeight:lyric?90:640,show:false,frame:false,transparent:lyric,backgroundColor:lyric?'#00000000':'#111118',hasShadow:!lyric,resizable:!lyric,thickFrame:!lyric,skipTaskbar:lyric,alwaysOnTop:lyric,title:'琛瑾音乐',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false}})
  let suppressAutomaticShow=false
  secureWindow(win)
  if(!lyric)win.webContents.once('did-finish-load',()=>{
@@ -240,7 +241,7 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
  switch(method){
   case 'app.flushReady':{const pending=pendingFlush;if(pending&&pending.token===params.token&&pending.windowId===senderId){pending.resolve();return true}return false}
    case 'library.load':return library.get()
-  case 'library.save':{const current=library.get();const supplied=params.state??params;const next=await library.save({...current,...supplied,downloads:current.downloads,scripts:current.scripts,editedLyrics:current.editedLyrics});await api.configure(next.settings);await sync.configure(next.settings);desktop.apply(next.settings);return next}
+  case 'library.save':{const current=library.get();const supplied=params.state??params;const next=await library.save({...current,...supplied,settings:current.settings,downloads:current.downloads,scripts:current.scripts,editedLyrics:current.editedLyrics});await api.configure(next.settings);await sync.configure(next.settings);desktop.apply(next.settings);return next}
   case 'settings.update':return updateSettings(params.settings??params.patch??params)
   case 'theme.importImage':{const [file]=await chooseOpen([{name:'背景图片',extensions:['png','jpg','jpeg','webp','gif']}]);if(!file)return null;const info=await stat(file);if(info.size>8*1024*1024)throw new Error('背景图片不能超过 8 MB');const bytes=await readFile(file);const mime:Record<string,string>={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif'};return {name:basename(file),data:`data:${mime[extname(file).toLowerCase()]};base64,${bytes.toString('base64')}`}}
    case 'audio.importImpulse':{const [file]=await chooseOpen([{name:'混响脉冲响应',extensions:['wav','flac','ogg','mp3']}]);if(!file)return null;const info=await stat(file);if(info.size>10*1024*1024)throw new Error('脉冲响应文件不能超过 10 MB');const bytes=await readFile(file);return {name:basename(file),data:bytes.toString('base64')}}
@@ -291,7 +292,7 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
     }return providers.getTrackDetails(track)}
    case 'discovery.album':return providers.getAlbum(source(params.source),String(params.id),page(params.page),Number(params.limit)||100)
    case 'discovery.singer':return providers.getSinger(source(params.source),String(params.id),page(params.page),Number(params.limit)||100)
-   case 'discovery.playlists':return cached(`playlists:${JSON.stringify(params)}`,()=>providers.getPlaylists(source(params.source),page(params.page),params.tag,params.sort??'hot'))
+   case 'discovery.playlists':return cached(`playlists:${JSON.stringify(params)}`,()=>providers.getPlaylists(source(params.source),page(params.page),params.tag,params.sort??'hot',params.limit??25))
   case 'discovery.playlist':return cached(`playlist:${JSON.stringify(params)}`,()=>providers.getPlaylist(source(params.source),String(params.id)))
   case 'discovery.boards':return cached(`boards:${params.source}`,()=>providers.getBoards(source(params.source)))
   case 'discovery.board':return cached(`board:${JSON.stringify(params)}`,()=>providers.getBoardTracks(source(params.source),String(params.id),page(params.page)))
@@ -325,7 +326,9 @@ async function invoke(method:string,input?:unknown,senderId?:number):Promise<unk
   case 'downloads.add':if(!Array.isArray(params.tracks))throw new Error('请提供下载歌曲列表');return downloads.add(params.tracks,quality(params.quality??library.get().settings.quality),typeof params.playlistName==='string'?params.playlistName:params.playlistId?library.get().playlists.find(list=>list.id===params.playlistId)?.name:undefined)
   case 'downloads.action':return downloads.action(params.id,params.action)
   case 'desktop.lyric':await updateSettings({desktopLyric:!!params.enabled});return !!params.enabled
-  case 'desktop.showMain':if(mainWindow){if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus()}return true
+  case 'desktop.gesture':if(!['move','resize','end'].includes(params.action))throw new Error('窗口操作无效');return desktop.gestureControl(params.action,senderId??-1)
+   case 'desktop.diagnostics':if(!process.env.CHENJIN_TEST_USER_DATA)throw new Error('诊断仅用于隔离测试');return desktop.diagnostics()
+   case 'desktop.showMain':if(mainWindow){if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus()}return true
    case 'desktop.resetPosition':return desktop.resetPosition()
    case 'desktop.lock':return desktop.setLock(!!params.enabled)
   case 'desktop.top':return desktop.setTop(!!params.enabled)

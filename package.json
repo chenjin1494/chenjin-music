@@ -57,6 +57,7 @@
     },
     "files": [
       "out/**/*",
+      "!out/native/**/*",
       "README.md",
       "AGENTS.md",
       "LICENSE",

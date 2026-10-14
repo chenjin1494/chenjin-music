@@ -1,11 +1,11 @@
 import {describe,expect,it,vi,afterEach,beforeEach}from 'vitest'
 import {EventEmitter}from 'node:events'
 import {inflateSync}from 'node:zlib'
-const mocked=vi.hoisted(()=>({theme:undefined as any,screen:undefined as any,trays:[] as any[],images:[] as Buffer[],displays:[{id:1,workArea:{x:0,y:0,width:1920,height:1040}}]}))
+const mocked=vi.hoisted(()=>({theme:undefined as any,screen:undefined as any,trays:[] as any[],images:[] as Buffer[],cursor:{x:-100,y:-100},displays:[{id:1,workArea:{x:0,y:0,width:1920,height:1040}}]}))
 vi.mock('electron',async()=>{
  const {EventEmitter}=await import('node:events')
  mocked.theme=Object.assign(new EventEmitter(),{shouldUseDarkColors:false})
- mocked.screen=Object.assign(new EventEmitter(),{getAllDisplays:()=>mocked.displays,getPrimaryDisplay:()=>mocked.displays[0],getCursorScreenPoint:()=>({x:-100,y:-100})})
+ mocked.screen=Object.assign(new EventEmitter(),{getAllDisplays:()=>mocked.displays,getPrimaryDisplay:()=>mocked.displays[0],getCursorScreenPoint:()=>({...mocked.cursor})})
  class MockTray extends EventEmitter{setToolTip=vi.fn();setTitle=vi.fn();setImage=vi.fn();setContextMenu=vi.fn();destroy=vi.fn();constructor(public image:unknown){super();mocked.trays.push(this)}}
  return {nativeImage:{createFromBuffer:(bytes:Buffer)=>{mocked.images.push(bytes);return bytes}},nativeTheme:mocked.theme,screen:mocked.screen,BrowserWindow:vi.fn(),globalShortcut:{register:()=>false,unregister:vi.fn()},Menu:{buildFromTemplate:(template:unknown)=>template},powerSaveBlocker:{start:()=>1,stop:vi.fn()},Tray:MockTray}
 })
@@ -32,10 +32,10 @@ describe('desktop lyric work areas',()=>{
  })
 })
 class MockWindow extends EventEmitter{
- webContents=new EventEmitter() as EventEmitter&{send:ReturnType<typeof vi.fn>}
+ webContents=new EventEmitter() as EventEmitter&{id:number;send:ReturnType<typeof vi.fn>}
  bounds={x:20,y:20,width:400,height:180};visible=false;destroyed=false
- setAlwaysOnTop=vi.fn();setIgnoreMouseEvents=vi.fn();setResizable=vi.fn();setMinimumSize=vi.fn();setMaximizable=vi.fn();setFullScreenable=vi.fn();setHasShadow=vi.fn();setSkipTaskbar=vi.fn();setOpacity=vi.fn();setProgressBar=vi.fn();setThumbarButtons=vi.fn();setTitle=vi.fn();show=vi.fn();focus=vi.fn()
- constructor(){super();this.webContents.send=vi.fn()}
+ setAlwaysOnTop=vi.fn((value:boolean)=>{this.onTop=value});onTop=false;opacity=1;setFocusable=vi.fn();getOpacity(){return this.opacity}isAlwaysOnTop(){return this.onTop}setIgnoreMouseEvents=vi.fn();setResizable=vi.fn();setMinimumSize=vi.fn();setMaximizable=vi.fn();setFullScreenable=vi.fn();setHasShadow=vi.fn();setSkipTaskbar=vi.fn();setOpacity=vi.fn((value:number)=>{this.opacity=value});setProgressBar=vi.fn();setThumbarButtons=vi.fn();setTitle=vi.fn();show=vi.fn();focus=vi.fn()
+ constructor(){super();this.webContents.id=2;this.webContents.send=vi.fn()}
  getBounds(){return {...this.bounds}}setBounds(bounds:typeof this.bounds){this.bounds={...bounds};this.emit('move')}
  isDestroyed(){return this.destroyed}isVisible(){return this.visible}isFullScreen(){return false}
  showInactive(){this.visible=true}hide(){this.visible=false}destroy(){this.destroyed=true;this.emit('closed')}
@@ -45,7 +45,13 @@ function create(){const main=new MockWindow(),lyric=new MockWindow(),service=new
 beforeEach(()=>{vi.useFakeTimers();mocked.displays=[{id:1,workArea:{x:0,y:0,width:1920,height:1040}}];mocked.theme.shouldUseDarkColors=false;mocked.trays.length=0})
 afterEach(()=>{for(const service of services.splice(0))service.dispose();vi.useRealTimers()})
 describe('desktop native feature lifecycle',()=>{
- it('reasserts on-top every 100ms only while enabled and on-top, stopping on disposal',()=>{
+ it('keeps locked lyric mouse input passed through after window updates and restores input when unlocked',()=>{
+   const {service,lyric}=create(),settings={...defaultSettings,tray:false,desktopLyric:true,desktopLyricLock:true,desktopLyricTopLoop:true}
+   service.apply(settings);expect(lyric.setResizable).not.toHaveBeenCalled();expect(lyric.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true,{forward:true});vi.advanceTimersByTime(100);expect(lyric.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true,{forward:true})
+   service.setTop(false,false);expect(lyric.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true,{forward:true});service.apply({...settings,desktopLyricTop:false});expect(lyric.setIgnoreMouseEvents).toHaveBeenCalledTimes(1);expect(lyric.setFocusable).not.toHaveBeenCalled()
+   service.setLock(false,false);expect(lyric.setResizable).not.toHaveBeenCalled();expect(lyric.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false,{forward:true})
+  })
+  it('reasserts on-top every 100ms only while enabled and on-top, stopping on disposal',()=>{
   const {service,lyric}=create(),settings={...defaultSettings,tray:false,desktopLyric:true,desktopLyricTopLoop:true}
   service.apply(settings);lyric.setAlwaysOnTop.mockClear();vi.advanceTimersByTime(300);expect(lyric.setAlwaysOnTop).toHaveBeenCalledTimes(3)
   service.setTop(false);lyric.setAlwaysOnTop.mockClear();vi.advanceTimersByTime(300);expect(lyric.setAlwaysOnTop).not.toHaveBeenCalled()
@@ -75,6 +81,13 @@ describe('desktop native feature lifecycle',()=>{
    const pixels=inflateSync(Buffer.concat(chunks)),alpha:number[]=[];for(let y=0;y<32;y++)for(let x=0;x<32;x++)alpha.push(pixels[y*129+1+x*4+3])
    expect(alpha).toContain(0);expect(alpha).toContain(255);expect(alpha.filter(value=>value===255).length).toBeLessThan(400)
   }
+ })
+  it('moves and resizes only from the lyric renderer, preserves an active gesture across settings and stops when locked',()=>{
+  const {service,lyric}=create(),settings={...defaultSettings,tray:false,desktopLyric:true,desktopLyricLock:false,desktopLyricX:100,desktopLyricY:100,desktopLyricWidth:500,desktopLyricHeight:180}
+  service.apply(settings);mocked.cursor={x:150,y:150};expect(()=>service.gestureControl('move',9)).toThrow();expect(service.gestureControl('move',2)).toBe(true)
+  mocked.cursor={x:180,y:170};vi.advanceTimersByTime(16);expect(lyric.getBounds()).toMatchObject({x:130,y:120})
+  service.apply({...settings,desktopLyricFontSize:44});expect(lyric.getBounds()).toMatchObject({x:130,y:120});service.gestureControl('end',2)
+  service.gestureControl('resize',2);mocked.cursor={x:200,y:200};vi.advanceTimersByTime(16);expect(lyric.getBounds()).toMatchObject({width:520,height:210});service.setLock(true);mocked.cursor={x:300,y:300};vi.advanceTimersByTime(32);expect(lyric.getBounds()).toMatchObject({width:520,height:210});expect(service.gestureControl('move',2)).toBe(false)
  })
  it('permits partial off-screen placement when unlocked but recovers after a monitor disconnect',()=>{
   mocked.displays=[{id:1,workArea:{x:0,y:0,width:1920,height:1040}},{id:2,workArea:{x:-1280,y:0,width:1280,height:1024}}]

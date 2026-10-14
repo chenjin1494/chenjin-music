@@ -195,9 +195,41 @@
   border-radius: 24px;
   background: var(--surface);
   padding: 18px;
-  max-height: min(420px, 65vh);
+  max-height: min(420px, calc(100dvh - var(--cj-topbar-height, 76px) - var(--cj-player-height, 100px) - 64px));
   overflow: auto;
+  overflow-wrap: anywhere;
   box-shadow: var(--m3-elevation);
+}
+
+.app-shell .search-box > svg,
+.app-shell .search-box > kbd,
+.app-shell .search-popover svg,
+.app-shell .search-popover .section-title button {
+  flex-shrink: 0;
+}
+
+.app-shell .search-popover .section-title {
+  flex-wrap: wrap;
+}
+
+.app-shell .search-popover .suggestion {
+  min-width: 0;
+  text-align: start;
+}
+
+.app-shell .search-popover .suggestion-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .search-popover .chips button {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .app-shell .workspace .main-content {
@@ -1342,7 +1374,7 @@ body:not(.desktop-lyric-body) .comments-backdrop .comment-item {
 
 @container music-content (max-width: 640px) {
   .app-shell :is(.track-head, .track-row) {
-    grid-template-columns: 24px minmax(110px, 1fr) 50px 54px;
+    grid-template-columns: 24px minmax(110px, 1fr) 50px 96px;
     gap: 8px;
   }
 
@@ -1621,4 +1653,30 @@ body:not(.desktop-lyric-body) .comments-backdrop .comment-item {
   .app-shell .playlist-card:hover {
     transform: none;
   }
+}
+
+@media (max-width: 640px) {
+  .app-shell :is(.track-head, .track-row) {
+    grid-template-columns: 24px minmax(110px, 1fr) 96px;
+    gap: 6px;
+  }
+
+  .app-shell .track-head > span:nth-child(3),
+  .app-shell .track-head > span:nth-child(4),
+  .app-shell .track-head > span:nth-child(5),
+  .app-shell .track-row :is(.album, .source-label, .track-time) {
+    display: none;
+  }
+}
+
+@container music-content (max-width: 920px) {
+  .app-shell .main-content .discovery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@container music-content (max-width: 740px) {
+  .app-shell .main-content .discovery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container music-content (max-width: 520px) {
+  .app-shell .main-content .discovery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

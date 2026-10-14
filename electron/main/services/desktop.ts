@@ -1,6 +1,8 @@
 import { BrowserWindow, globalShortcut, Menu, nativeImage, nativeTheme, powerSaveBlocker, screen, Tray } from 'electron'
 import { deflateSync } from 'node:zlib'
 import type { PlayerStatus, Settings } from '../../../src/shared/types'
+import { normalizeAppearance } from '../../../src/shared/appearance'
+export type DesktopLyricsWindow = BrowserWindow
 
 function icon(kind:'music'|'prev'|'play'|'pause'|'next',tone?:'black'|'white') {
  const width=32,raw=Buffer.alloc((width*4+1)*width)
@@ -40,7 +42,7 @@ export function lyricShouldShow(input:{enabled:boolean;hasContent:boolean;playin
 export interface DesktopOptions {pollMs?:number}
 export class DesktopService {
  private tray?:Tray
- private lyric?:BrowserWindow
+ private lyric?:DesktopLyricsWindow
  private blocker?:number
  private locked=false
  private onTop=true
@@ -56,6 +58,10 @@ export class DesktopService {
  private boundMain?:BrowserWindow
  private disposed=false
  private applyingBounds=false
+ private appliedLocked?:boolean
+ private appliedTaskbar?:boolean
+ private lyricReady=false
+ private gesture?:{kind:'move'|'resize';point:Electron.Point;bounds:Electron.Rectangle;started:number;timer:NodeJS.Timeout}
  private fullscreenEnter=()=>{this.fullscreen=true;this.refreshVisibility()}
  private fullscreenLeave=()=>{this.fullscreen=false;this.refreshVisibility()}
  private lastStatus?:PlayerStatus
@@ -63,7 +69,7 @@ export class DesktopService {
  private trayTone?:'black'|'white'|'music'
  private themeChanged=()=>this.updateTrayImage()
  private displayChanged=()=>{const displays=screen.getAllDisplays(),removed=[...this.displayIds].some(id=>!displays.some(display=>display.id===id));this.displayIds=new Set(displays.map(display=>display.id));if(this.lyric&&!this.lyric.isDestroyed()){this.place(this.lyric.getBounds(),removed);this.queueBoundsSave()}this.refreshVisibility()}
- constructor(private main:()=>BrowserWindow|undefined,private createLyric:()=>BrowserWindow,private command:(command:string,value?:unknown)=>void,private options:DesktopOptions={},private onSettingChange?:(patch:Partial<Settings>)=>void|Promise<void>){
+ constructor(private main:()=>BrowserWindow|undefined,private createLyric:()=>DesktopLyricsWindow,private command:(command:string,value?:unknown)=>void,private options:DesktopOptions={},private onSettingChange?:(patch:Partial<Settings>)=>void|Promise<void>){
   this.displayIds=new Set(screen.getAllDisplays().map(display=>display.id));nativeTheme.on('updated',this.themeChanged)
   screen.on('display-added',this.displayChanged);screen.on('display-removed',this.displayChanged);screen.on('display-metrics-changed',this.displayChanged)
  }
@@ -80,8 +86,9 @@ export class DesktopService {
   const width=finite(s.desktopLyricWidth,vertical?180:900),height=finite(s.desktopLyricHeight,vertical?900:180)
   return this.checkedBounds({x:finite(s.desktopLyricX,area.x+(area.width-width)/2),y:finite(s.desktopLyricY,area.y+area.height-height),width,height})
  }
- private place(bounds:Electron.Rectangle,force=false){if(!this.lyric||this.lyric.isDestroyed())return;const next=this.checkedBounds(bounds,force),old=this.lyric.getBounds();if(['x','y','width','height'].every(key=>(old as any)[key]===(next as any)[key]))return;this.applyingBounds=true;try{this.lyric.setBounds(next)}finally{this.applyingBounds=false}}
- private queueBoundsSave(){if(this.disposed||this.applyingBounds||!this.lyric||this.lyric.isDestroyed())return;if(this.boundsTimer)clearTimeout(this.boundsTimer);this.boundsTimer=setTimeout(()=>{this.boundsTimer=undefined;if(!this.lyric||this.lyric.isDestroyed())return;this.place(this.lyric.getBounds());const b=this.lyric.getBounds();this.save({desktopLyricX:b.x,desktopLyricY:b.y,desktopLyricWidth:b.width,desktopLyricHeight:b.height})},250);this.boundsTimer.unref()}
+ private place(bounds:Electron.Rectangle,force=false){if(!this.lyric||this.lyric.isDestroyed())return;const next=this.checkedBounds(bounds,force),old=this.lyric.getBounds();if(['x','y','width','height'].every(key=>(old as any)[key]===(next as any)[key]))return;this.applyingBounds=true;try{this.lyric.setBounds(next);const applied=this.lyric.getBounds();if(['x','y','width','height'].some(key=>(applied as any)[key]!==(next as any)[key]))this.lyric.setBounds(next)}finally{this.applyingBounds=false}}
+    private applyMouseInputMode(){if(!this.lyric||this.lyric.isDestroyed()||this.appliedLocked===this.locked)return;this.lyric.setIgnoreMouseEvents(this.locked,{forward:true});this.appliedLocked=this.locked}
+ private queueBoundsSave(){if(this.disposed||this.applyingBounds||this.gesture||!this.lyric||this.lyric.isDestroyed())return;if(this.boundsTimer)clearTimeout(this.boundsTimer);this.boundsTimer=setTimeout(()=>{this.boundsTimer=undefined;if(!this.lyric||this.lyric.isDestroyed())return;this.place(this.lyric.getBounds());const b=this.lyric.getBounds();this.save({desktopLyricX:b.x,desktopLyricY:b.y,desktopLyricWidth:b.width,desktopLyricHeight:b.height})},250);this.boundsTimer.unref()}
  apply(settings:Settings){
   if(this.disposed)return
   this.settings=structuredClone(settings);this.bindMain();this.registerHotkeys(settings)
@@ -92,10 +99,17 @@ export class DesktopService {
   this.updateTrayMenu()
   this.updateTrayImage();this.updateStatusText()
   this.setLyric(settings.desktopLyric,false)
-  if(this.lyric){this.place(this.desiredBounds());this.setLock(this.locked,false);this.setTop(this.onTop,false);this.lyric.setSkipTaskbar(!settings.desktopLyricTaskbar);this.lyric.setOpacity(Math.max(0,Math.min(1,finite(settings.desktopLyricOpacity,1))));this.lyric.setResizable(!this.locked);this.queueBoundsSave();this.sendStyle()}
+  if(this.lyric){if(!this.gesture)this.place(this.desiredBounds());this.setTop(this.onTop,false);if(this.appliedTaskbar!==!!settings.desktopLyricTaskbar){this.lyric.setSkipTaskbar(!settings.desktopLyricTaskbar);this.appliedTaskbar=!!settings.desktopLyricTaskbar}const opacity=Math.max(0,Math.min(1,finite(normalizeAppearance(settings.appearance).components.desktopLyrics?.opacity??settings.desktopLyricOpacity,1)));if(Math.abs(this.lyric.getOpacity()-opacity)>.001)this.lyric.setOpacity(opacity);this.applyMouseInputMode();this.sendStyle()}
   this.refreshVisibility();this.updateBlocker(settings)
  }
  private updateTrayMenu(){this.tray?.setContextMenu(Menu.buildFromTemplate([{label:'显示琛瑾音乐',click:()=>{this.main()?.show();this.main()?.focus()}},{label:'播放 / 暂停',click:()=>this.command('toggle')},{label:'上一首',click:()=>this.command('prev')},{label:'下一首',click:()=>this.command('next')},{type:'separator'},{label:'桌面歌词',type:'checkbox',checked:this.enabled,click:()=>this.setLyric(!this.enabled)},{label:this.locked?'解锁桌面歌词':'锁定桌面歌词',enabled:this.enabled,click:()=>this.setLock(!this.locked)},{label:'重置歌词位置',enabled:this.enabled,click:()=>this.resetPosition()},{label:'退出',click:()=>this.command('quit')}]))}
+  gestureControl(action:'move'|'resize'|'end',senderId:number){
+  const win=this.lyric;if(!win||win.isDestroyed()||senderId!==win.webContents.id)throw new Error('仅桌面歌词窗口可以调整位置')
+  if(action==='end'){this.endGesture();return true}if(this.locked)return false
+  this.endGesture();const point=screen.getCursorScreenPoint(),bounds=win.getBounds()
+  const timer=setInterval(()=>{const g=this.gesture;if(!g||win.isDestroyed()||this.locked||Date.now()-g.started>15000){this.endGesture();return}const p=screen.getCursorScreenPoint(),dx=p.x-g.point.x,dy=p.y-g.point.y;this.place(g.kind==='move'?{...g.bounds,x:g.bounds.x+dx,y:g.bounds.y+dy}:{...g.bounds,width:Math.max(120,g.bounds.width+dx),height:Math.max(90,g.bounds.height+dy)})},16);timer.unref();this.gesture={kind:action,point,bounds,started:Date.now(),timer};return true
+ }
+ private endGesture(){if(!this.gesture)return;clearInterval(this.gesture.timer);this.gesture=undefined;if(this.lyric&&!this.lyric.isDestroyed()){const b=this.lyric.getBounds();this.save({desktopLyricX:b.x,desktopLyricY:b.y,desktopLyricWidth:b.width,desktopLyricHeight:b.height})}}
  resetPosition(){
   if(!this.settings)return false
   const area=screen.getPrimaryDisplay().workArea,vertical=this.settings.desktopLyricDirection==='vertical'
@@ -116,20 +130,20 @@ export class DesktopService {
   if(this.disposed)return false
   this.enabled=enabled;if(persist)this.save({desktopLyric:enabled})
   if(enabled&&(!this.lyric||this.lyric.isDestroyed())){
-   const win=this.createLyric();this.lyric=win;win.setMinimumSize(38,38);win.setMaximizable(false);win.setFullScreenable(false);win.setHasShadow(false);this.place(this.settings?this.desiredBounds():win.getBounds());win.setAlwaysOnTop(this.onTop,'floating');win.setIgnoreMouseEvents(this.locked,{forward:true});win.setResizable(!this.locked)
+   const win=this.createLyric();this.lyric=win;this.appliedLocked=undefined;this.appliedTaskbar=undefined;this.lyricReady=false;win.once('ready-to-show',()=>{if(this.lyric!==win||win.isDestroyed())return;this.lyricReady=true;this.refreshVisibility()});win.setMinimumSize(38,38);win.setMaximizable(false);win.setFullScreenable(false);win.setHasShadow(false);this.place(this.settings?this.desiredBounds():win.getBounds());win.setAlwaysOnTop(this.onTop,'floating');this.applyMouseInputMode()
    win.on('move',()=>this.queueBoundsSave());win.on('resize',()=>this.queueBoundsSave());win.on('closed',()=>{if(this.lyric===win)this.lyric=undefined});win.webContents.on('did-finish-load',()=>{if(this.lyric===win){this.sendStyle();if(this.lastStatus)win.webContents.send('lyric.status',structuredClone(this.lastStatus));this.refreshVisibility()}})
   }
   if(enabled&&!this.timer){this.timer=setInterval(()=>this.refreshVisibility(),Math.max(50,this.options.pollMs??100));this.timer.unref()}
   if(!enabled&&this.timer){clearInterval(this.timer);this.timer=undefined}
   this.refreshVisibility();this.updateTrayMenu();return enabled
  }
- setLock(enabled:boolean,persist=true){this.locked=enabled;this.lyric?.setIgnoreMouseEvents(enabled,{forward:true});this.lyric?.setResizable(!enabled);if(persist)this.save({desktopLyricLock:enabled});this.sendStyle();this.updateTrayMenu();this.refreshVisibility();return enabled}
- setTop(enabled:boolean,persist=true){this.onTop=enabled;this.lyric?.setAlwaysOnTop(enabled,'floating');if(persist)this.save({desktopLyricTop:enabled});this.sendStyle();return enabled}
+ setLock(enabled:boolean,persist=true){if(enabled)this.endGesture();this.locked=enabled;this.applyMouseInputMode();if(persist)this.save({desktopLyricLock:enabled});this.sendStyle();this.updateTrayMenu();this.refreshVisibility();return enabled}
+ setTop(enabled:boolean,persist=true){this.onTop=enabled;if(this.lyric&&!this.lyric.isDestroyed()&&this.lyric.isAlwaysOnTop()!==enabled)this.lyric.setAlwaysOnTop(enabled,'floating');if(persist)this.save({desktopLyricTop:enabled});this.sendStyle();return enabled}
  private refreshVisibility(){
   if(!this.lyric||this.lyric.isDestroyed()||!this.settings)return
   if(this.enabled&&this.onTop&&this.settings.desktopLyricTopLoop===true)this.lyric.setAlwaysOnTop(true,'floating')
   const b=this.lyric.getBounds(),point=screen.getCursorScreenPoint(),hovered=point.x>=b.x&&point.x<b.x+b.width&&point.y>=b.y&&point.y<b.y+b.height
-  const visible=lyricShouldShow({enabled:this.enabled,hasContent:this.hasContent,playing:this.playing,pauseHide:!!this.settings.desktopLyricPauseHide,fullscreen:this.fullscreen,fullscreenHide:!!this.settings.desktopLyricFullscreenHide,locked:this.locked,hovered,hoverHide:!!this.settings.desktopLyricHoverHide})
+  const visible=this.lyricReady&&lyricShouldShow({enabled:this.enabled,hasContent:this.hasContent,playing:this.playing,pauseHide:!!this.settings.desktopLyricPauseHide,fullscreen:this.fullscreen,fullscreenHide:!!this.settings.desktopLyricFullscreenHide,locked:this.locked,hovered,hoverHide:!!this.settings.desktopLyricHoverHide})
   if(visible&&!this.lyric.isVisible())this.lyric.showInactive();else if(!visible&&this.lyric.isVisible())this.lyric.hide()
  }
  private updateTrayImage(){if(!this.tray||!this.settings)return;const tone=trayAppearance(this.settings,nativeTheme.shouldUseDarkColors);if(tone!==this.trayTone){this.tray.setImage(icons[tone]);this.trayTone=tone}}
@@ -144,5 +158,6 @@ export class DesktopService {
   this.main()?.setProgressBar(this.playing&&status.duration>0?Math.max(0,Math.min(1,status.progress/status.duration)):-1);this.updateStatusText();this.updateTrayImage()
   if(process.platform==='win32')this.main()?.setThumbarButtons([{tooltip:'上一首',icon:icons.prev,click:()=>this.command('prev')},{tooltip:this.playing?'暂停':'播放',icon:this.playing?icons.pause:icons.play,click:()=>this.command('toggle')},{tooltip:'下一首',icon:icons.next,click:()=>this.command('next')}]);this.updateBlocker(settings)
  }
- dispose(){if(this.disposed)return;if(this.boundsTimer&&this.lyric&&!this.lyric.isDestroyed()){const b=this.lyric.getBounds();this.save({desktopLyricX:b.x,desktopLyricY:b.y,desktopLyricWidth:b.width,desktopLyricHeight:b.height})}this.disposed=true;if(this.timer)clearInterval(this.timer);if(this.boundsTimer)clearTimeout(this.boundsTimer);for(const key of this.keys)globalShortcut.unregister(key);this.keys.clear();this.boundMain?.removeListener('enter-full-screen',this.fullscreenEnter);this.boundMain?.removeListener('leave-full-screen',this.fullscreenLeave);screen.removeListener('display-added',this.displayChanged);screen.removeListener('display-removed',this.displayChanged);screen.removeListener('display-metrics-changed',this.displayChanged);nativeTheme.removeListener('updated',this.themeChanged);this.tray?.destroy();this.tray=undefined;this.trayTone=undefined;this.lyric?.destroy();this.lyric=undefined;if(this.blocker!==undefined){powerSaveBlocker.stop(this.blocker);this.blocker=undefined}}
+  async diagnostics(){return {backend:'electron',visible:this.lyric?.isVisible()??false,locked:this.locked,bounds:this.lyric?.getBounds()}}
+  dispose(){if(this.disposed)return;this.endGesture();if(this.boundsTimer&&this.lyric&&!this.lyric.isDestroyed()){const b=this.lyric.getBounds();this.save({desktopLyricX:b.x,desktopLyricY:b.y,desktopLyricWidth:b.width,desktopLyricHeight:b.height})}this.disposed=true;if(this.timer)clearInterval(this.timer);if(this.boundsTimer)clearTimeout(this.boundsTimer);for(const key of this.keys)globalShortcut.unregister(key);this.keys.clear();this.boundMain?.removeListener('enter-full-screen',this.fullscreenEnter);this.boundMain?.removeListener('leave-full-screen',this.fullscreenLeave);screen.removeListener('display-added',this.displayChanged);screen.removeListener('display-removed',this.displayChanged);screen.removeListener('display-metrics-changed',this.displayChanged);nativeTheme.removeListener('updated',this.themeChanged);this.tray?.destroy();this.tray=undefined;this.trayTone=undefined;this.lyric?.destroy();this.lyric=undefined;if(this.blocker!==undefined){powerSaveBlocker.stop(this.blocker);this.blocker=undefined}}
 }

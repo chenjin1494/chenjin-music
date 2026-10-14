@@ -1,0 +1,343 @@
+/* Soft translucent surfaces; explicit appearance JSON still has priority. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+body :is(input:not([type=range]):not([type=checkbox]):not([type=color]), textarea, [contenteditable=true], [contenteditable=plaintext-only]),
+body :is([contenteditable=true], [contenteditable=plaintext-only]) * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+img, svg { -webkit-user-drag: none; }
+
+.app-shell {
+  --soft-edge: color-mix(in srgb, var(--text) 9%, transparent);
+  --soft-shadow: 0 12px 36px color-mix(in srgb, var(--bg) 20%, transparent);
+  --soft-panel: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 16px;
+  gap: 14px;
+  background:
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 54%),
+    radial-gradient(ellipse at 96% 88%, color-mix(in srgb, var(--md-secondary, var(--accent)) 12%, transparent), transparent 56%),
+    var(--bg);
+}
+
+.app-shell .sidebar,
+.app-shell .workspace,
+.app-shell .player-bar {
+  border: 1px solid var(--soft-edge);
+  box-shadow: var(--soft-shadow), inset 0 1px color-mix(in srgb, var(--text) 4%, transparent);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+.app-shell .sidebar {
+  background: color-mix(in srgb, var(--sidebar) 84%, transparent);
+  border-radius: 24px;
+  padding-top: 28px;
+}
+.app-shell .workspace {
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+}
+.app-shell .workspace .topbar {
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+.app-shell .sidebar .brand {
+  margin-bottom: 30px;
+  letter-spacing: .2px;
+}
+.app-shell .brand .brand-mark {
+  color: var(--md-on-primary-container, var(--text));
+  background: linear-gradient(145deg, var(--md-primary-container, var(--surface)), color-mix(in srgb, var(--accent) 26%, var(--surface)));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.app-shell .brand small {
+  letter-spacing: 1.7px;
+  opacity: .8;
+}
+.app-shell .sidebar .nav-label {
+  font-size: 10px;
+  letter-spacing: .8px;
+  margin-bottom: 10px;
+}
+.app-shell .sidebar .nav-item {
+  border-radius: 15px;
+  padding-inline: 15px;
+  transition: background .18s, color .18s, box-shadow .18s;
+}
+.app-shell .sidebar .nav-item:hover {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+.app-shell .sidebar .nav-item.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--md-primary, var(--accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.app-shell .sidebar .sidebar-bottom {
+  border-top: 1px solid var(--soft-edge);
+}
+
+.app-shell .topbar .search-box {
+  border-radius: 16px;
+  border: 1px solid var(--soft-edge);
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  box-shadow: inset 0 1px color-mix(in srgb, var(--text) 3%, transparent);
+}
+.app-shell .topbar .search-box:focus-within {
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.app-shell .search-box .search-popover {
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--soft-edge);
+  border-radius: 20px;
+  box-shadow: 0 16px 48px color-mix(in srgb, var(--bg) 36%, transparent);
+}
+.app-shell .search-popover .search-popover-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.app-shell .search-popover-header > strong {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.app-shell .search-popover-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+.app-shell .search-popover .search-popover-actions .search-clear,
+.app-shell .search-popover .search-popover-actions .icon-button {
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  border-radius: 10px;
+}
+.app-shell .search-popover .search-popover-actions .search-clear {
+  padding: 0 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.app-shell .search-popover .search-popover-actions .icon-button { width: 30px; }
+.app-shell .search-popover-actions .search-clear:hover { color: var(--text); }
+.app-shell .search-popover .search-popover-header { margin-block-end: 8px; }
+.app-shell .search-popover > .suggestion { margin-block-end: 6px; }
+.app-shell .search-popover .hot-label { display: block; margin: 12px 0 8px; }
+.app-shell .search-popover > .chips { margin-block-start: 8px; }
+.app-shell .search-popover .suggestion {
+  border-radius: 10px;
+  padding-inline: 10px;
+}
+
+.app-shell .page-heading h1 {
+  font-weight: 650;
+  letter-spacing: -.6px;
+}
+.app-shell .date-label {
+  padding: 6px 10px;
+  border: 1px solid var(--soft-edge);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 65%, transparent);
+}
+.app-shell .main-content .welcome-hero {
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 26px;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 88% 30%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%),
+    linear-gradient(125deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--md-primary-container, var(--surface)) 60%, var(--surface)));
+  box-shadow: 0 10px 32px color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.app-shell .welcome-hero .hero-content { padding: 32px 34px; }
+.app-shell .welcome-hero h2 {
+  color: var(--text);
+  font-size: clamp(28px, 3vw, 38px);
+  letter-spacing: -.9px;
+  line-height: 1.28;
+}
+.app-shell .welcome-hero p { color: var(--muted); }
+.app-shell .welcome-hero .hero-badge {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  color: var(--md-primary, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+.app-shell .hero-art .record {
+  background:
+    radial-gradient(circle at 28% 24%, color-mix(in srgb, var(--text) 8%, transparent), transparent 48%),
+    repeating-radial-gradient(circle, transparent 0 10px, color-mix(in srgb, var(--accent) 9%, transparent) 11px 12px),
+    color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--bg) 30%, transparent), inset 0 1px color-mix(in srgb, var(--text) 8%, transparent);
+}
+.app-shell .hero-art .record-label {
+  background: linear-gradient(145deg, var(--md-primary-container, var(--surface)), color-mix(in srgb, var(--accent) 34%, var(--surface)));
+  color: var(--md-on-primary-container, var(--text));
+  box-shadow: inset 0 1px color-mix(in srgb, var(--text) 12%, transparent);
+}
+.app-shell .hero-art .floating-note {
+  border: 1px solid var(--soft-edge);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--soft-shadow);
+}
+.app-shell .hero-art .art-caption { color: var(--muted); letter-spacing: 2px; }
+
+.app-shell .playlist-card {
+  border-radius: 20px;
+  background: var(--soft-panel);
+  border: 1px solid var(--soft-edge);
+  padding: 12px;
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--bg) 10%, transparent);
+}
+.app-shell .playlist-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--surface);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--bg) 20%, transparent);
+}
+.app-shell .playlist-card .playlist-art { border-radius: 14px; }
+.app-shell .playlist-card.new-playlist-card {
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  border-style: dashed;
+  box-shadow: none;
+}
+.app-shell :is(.settings-card, .source-card, .download-card, .info-card, .source-url-form, .quiet-empty) {
+  background: var(--soft-panel);
+  border: 1px solid var(--soft-edge);
+  border-radius: 20px;
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--bg) 8%, transparent);
+}
+.app-shell .track-head { background: color-mix(in srgb, var(--surface) 68%, transparent); }
+.app-shell .track-row:hover { background: color-mix(in srgb, var(--surface) 82%, transparent); }
+.app-shell .track-row.selected,
+.app-shell .track-row.active { background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
+.app-shell .primary-button,
+.app-shell .player-bar .player-track-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.app-shell .player-bar .player-track-actions .icon-button { display: inline-flex; width: 30px; height: 30px; }
+.app-shell .player-bar .player-track-actions .favorite-button { margin-left: 0; }
+.app-shell .player-bar .favorite-button[aria-pressed="true"] { color: var(--accent); }
+@media (max-width: 640px) {
+  .app-shell .player-bar { grid-template-columns: minmax(120px, 1.2fr) minmax(150px, 1.7fr) auto; }
+  .app-shell .player-bar .now-playing { gap: 5px; }
+}
+.app-shell .player-bar .play-button {
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--md-primary, var(--accent)) 18%, transparent);
+}
+.app-shell .primary-button { border-radius: 13px; }
+.app-shell .text-button { border-radius: 12px; }
+.app-shell .topbar .icon-button { border-radius: 12px; }
+
+.app-shell > .player-bar,
+.app-shell:has(.theme-image-background) > .player-bar {
+  z-index: 70;
+}
+.app-shell .player-bar {
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--player) 90%, transparent);
+  /* The volume value extends above the bar. */
+  overflow: visible;
+}
+.app-shell .player-bar .player-cover { border-radius: 14px; }
+.app-shell .player-bar .now-playing strong { font-weight: 600; }
+.app-shell .player-bar .progress-row input {
+  height: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--border));
+}
+.app-shell .player-bar .volume-slider { height: 4px; }
+.app-shell .player-bar .volume-value {
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--bg) 26%, transparent);
+  border-radius: 10px;
+}
+
+/* Lyrics stay behind the queue, while dialogs still stay above both. */
+.app-shell .queue-overlay {
+  z-index: 60;
+  background: color-mix(in srgb, var(--bg) 32%, transparent);
+}
+.app-shell .queue-drawer {
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(22px);
+  border: 1px solid var(--soft-edge);
+  box-shadow: 0 16px 50px color-mix(in srgb, var(--bg) 35%, transparent);
+  border-radius: 22px;
+}
+.app-shell .lyrics-layer { position: fixed; inset: 0; z-index: 50; }
+.app-shell .full-lyrics {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  padding: clamp(84px, 10vh, 112px) 4% 4%;
+  background:
+    radial-gradient(ellipse at 25% 45%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 65%),
+    var(--bg);
+}
+.app-shell.lyrics-open > .player-bar { z-index: 70; }
+.lyrics-window-actions { position: fixed; top: 34px; right: 41px; z-index: 100; -webkit-app-region: no-drag; }
+.lyrics-window-actions button { -webkit-app-region: no-drag; }
+@media (max-width: 640px) { .lyrics-window-actions { top: 18px; right: 12px; } }
+.lyrics-enter-active { transition: opacity 260ms ease-out, transform 320ms cubic-bezier(.16, 1, .3, 1); }
+.lyrics-leave-active { transition: opacity 180ms ease-in, transform 220ms cubic-bezier(.4, 0, 1, 1); }
+.lyrics-enter-from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.985); }
+.lyrics-leave-to { opacity: 0; transform: translate3d(0, 10px, 0) scale(.995); }
+.app-shell :is(.modal, .track-details, .alternatives-modal) {
+  border: 1px solid var(--soft-edge);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--bg) 35%, transparent);
+}
+
+@media (max-width: 960px) {
+  .app-shell { padding: 12px; gap: 12px; }
+  .app-shell .welcome-hero .hero-content { padding: 28px; }
+  .app-shell .welcome-hero h2 { font-size: 30px; }
+}
+@media (max-width: 640px) {
+  .app-shell { padding: 8px; gap: 8px; }
+  .app-shell .sidebar { padding-top: 22px; }
+  .app-shell .sidebar .nav-item { padding-inline: 0; }
+  .app-shell .welcome-hero .hero-content { padding: 24px 20px; }
+  .app-shell .welcome-hero h2 { font-size: 28px; }
+  .app-shell .date-label { padding: 4px 7px; }
+  .app-shell .player-bar .now-playing .player-cover {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 10px;
+  }
+}
+/* Page changes use short compositor-friendly fades rather than abrupt swaps. */
+.app-shell .page-view { min-height: 100%; transform-origin: center top; }
+.page-enter-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.75,.25,1), filter 180ms ease; }
+.page-leave-active { transition: opacity 110ms ease, transform 140ms ease-in, filter 110ms ease; }
+.page-enter-from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.995); filter: blur(2px); }
+.page-leave-to { opacity: 0; transform: translate3d(0, -4px, 0) scale(.998); filter: blur(1px); }
+.fade-enter-active, .fade-leave-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.75,.25,1); }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translate3d(0, 8px, 0) scale(.99); }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active, .page-leave-active, .fade-enter-active, .fade-leave-active, .lyrics-enter-active, .lyrics-leave-active { transition-duration: 1ms; }
+  .page-enter-from, .page-leave-to, .fade-enter-from, .fade-leave-to, .lyrics-enter-from, .lyrics-leave-to { filter: none; transform: none; }
+  .app-shell .full-lyrics .lyrics-spectrum span { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-shell .sidebar { background: var(--sidebar); }
+  .app-shell .workspace { background: var(--bg); }
+  .app-shell .player-bar { background: var(--player); }
+  .app-shell .sidebar, .app-shell .workspace, .app-shell .player-bar { backdrop-filter: none; }
+}

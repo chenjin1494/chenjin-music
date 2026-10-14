@@ -14,7 +14,7 @@ export interface Settings {
  theme: 'dark' | 'light' | 'system'; accent: string; font: string; language: string; animation: boolean
  volume: number; muted: boolean; playbackRate: number; preservesPitch: boolean; quality: Quality
  playMode: 'listLoop' | 'random' | 'order' | 'singleLoop' | 'none'; startupAutoPlay: boolean; savePlayTime: boolean; autoSkip: boolean
- desktopLyric: boolean; desktopLyricNextLine?: boolean; lyricTranslation: boolean; lyricRoma: boolean; lyricOffset: number
+ desktopLyric: boolean; desktopLyricNextLine?: boolean; desktopLyricAlign?: 'left' | 'center' | 'right'; lyricTranslation: boolean; lyricRoma: boolean; lyricOffset: number
  tray: boolean; closeToTray: boolean; closeBehavior?: 'ask' | 'tray' | 'quit'; preventSleep: boolean; downloadEnabled: boolean; downloadPath: string
  downloadConcurrency: number; downloadFileName: string; downloadLyrics: boolean; embedCover: boolean; embedLyrics: boolean; skipExisting: boolean
  searchHistory: boolean; hotSearch: boolean; proxy: string; openAPI: boolean; openAPIPort: number; openAPILan: boolean

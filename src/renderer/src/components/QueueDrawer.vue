@@ -30,7 +30,7 @@ function endDrag(): void { dragging.value = undefined; targetIndex.value = -1 }
 </script>
 
 <template>
-  <div class="overlay" @click.self="emit('close')">
+  <div class="overlay queue-overlay" @click.self="emit('close')">
     <aside class="queue-drawer" aria-label="播放队列">
       <div class="section-title"><div><h2>接下来播放</h2><small>{{ music.queue.length + music.priorityQueue.length }} 首歌曲</small></div><button class="icon-button" aria-label="关闭播放队列" @click="emit('close')"><Icon name="X" /></button></div>
       <div class="queue-actions"><span>{{ { listLoop: '列表循环', random: '随机播放', order: '顺序播放', singleLoop: '单曲循环', none:'不循环' }[music.settings.playMode] }}</span><button @click="music.clearQueue">清空队列</button></div>

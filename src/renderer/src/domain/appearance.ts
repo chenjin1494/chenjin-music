@@ -16,7 +16,7 @@ function styleRules(id:AppearanceComponentId,style:AppearanceStyle,priority=comp
  for(const [key,raw]of Object.entries(style) as [keyof AppearanceStyle,string|number][]){
   if(raw==null)continue
   if(['mutedColor','accentColor','hoverBackground','activeBackground','rowHeight','iconSize','coverSize','headingSize'].includes(key))continue
-  const property=cssNames[key];if(!property)continue
+  const property=cssNames[key];if(!property||id==='desktopLyrics'&&key==='opacity')continue
   let value=typeof raw==='number'?`${raw}${['opacity','lineHeight','fontWeight','strokeWidth'].includes(key)?'':key==='animationDuration'?'ms':'px'}`:String(raw)
   if(key==='height'&&['search','input'].includes(id)){extra.push(rule(id==='search'?scope('.search-box',priority):scope('input:not([type=checkbox]):not([type=range]):not([type=color]),select',priority),[`height:${value}!important`]));continue}
   if(key==='height'&&id==='hero')declarations.push(`min-height:${value}!important`,'overflow:hidden')

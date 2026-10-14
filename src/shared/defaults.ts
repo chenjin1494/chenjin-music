@@ -5,7 +5,7 @@ export const defaultSettings: Settings = {
  theme: 'dark', accent: '#a78bfa', font: '', language: 'zh-CN', animation: true,
  volume: .75, muted: false, playbackRate: 1, preservesPitch: true, quality: '128k',
  playMode: 'listLoop', autoUpdateLists:true, playDownloaded:true, autoSwitchSource:true, downloadOtherSource:false, addMusicLocation:'top', startupAutoPlay: false, savePlayTime: true, autoSkip: true,
- desktopLyric: false, desktopLyricNextLine: true, lyricTranslation: false, lyricRoma: false, lyricOffset: 0,
+ desktopLyric: false, desktopLyricNextLine: true, desktopLyricAlign: 'center', lyricTranslation: false, lyricRoma: false, lyricOffset: 0,
  tray: true, closeToTray: false, closeBehavior: 'ask', preventSleep: true, downloadEnabled: true, downloadPath: '',
  downloadConcurrency: 3, downloadFileName: '{name} - {singer}', downloadLyrics: true,
  embedCover: true, embedLyrics: false, embedWordLyrics:true, embedTranslation:false, embedRoman:false, pauseOnDeviceRemoved:false, skipExisting: true, searchHistory: true, hotSearch: true,
